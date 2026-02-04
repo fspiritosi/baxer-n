@@ -35,6 +35,7 @@ export async function updateCompany(companyId: string, input: UpdateCompanyInput
       data: {
         name: input.name,
         taxId: input.taxId,
+        taxStatus: input.taxStatus,
         description: input.description,
         email: input.email,
         phone: input.phone,

@@ -3,10 +3,10 @@
 #
 # PostgreSQL (siempre):
 # - Host: localhost
-# - Puerto: 5433
+# - Puerto: 5533
 # - Usuario: postgres
 # - Password: postgres
-# - Base de datos: acme_logistics
+# - Base de datos: nahuel-boxer-db-boxer-db
 #
 # MinIO (solo si STORAGE_PROVIDER=s3):
 # - API S3: http://localhost:9002
@@ -22,19 +22,19 @@
 # Para Bajar
 # docker-compose --profile storage down
 
-name: acme-logistics
+name: nahuel-boxer
 
 services:
   db:
     image: postgres:16-alpine
-    container_name: acme-logistics-db
+    container_name: nahuel-boxer-db
     restart: "no"
     ports:
-      - '5433:5432'
+      - '5533:5432'
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-acme_logistics}
+      POSTGRES_DB: ${POSTGRES_DB:-nahuel-boxer-db-boxer-db}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -45,7 +45,7 @@ services:
 
   minio:
     image: minio/minio:latest
-    container_name: acme-logistics-minio
+    container_name: nahuel-boxer-minio
     profiles:
       - storage
     restart: "no"
@@ -67,7 +67,7 @@ services:
   # Servicio para crear el bucket inicial automáticamente
   minio-init:
     image: minio/mc:latest
-    container_name: acme-logistics-minio-init
+    container_name: nahuel-boxer-minio-init
     profiles:
       - storage
     depends_on:
@@ -76,7 +76,7 @@ services:
     entrypoint: >
       /bin/sh -c "
       mc alias set myminio http://minio:9000 $${MINIO_ROOT_USER:-minioadmin} $${MINIO_ROOT_PASSWORD:-minioadmin123};
-      mc mb myminio/$${S3_BUCKET:-acme-docs-docs} --ignore-existing;
+      mc mb myminio/$${S3_BUCKET:-nahuel-boxer-docs-boxer-docs-docs-docs} --ignore-existing;
       mc anonymous set download myminio/$${S3_BUCKET:-documents}/public;
       echo 'Bucket created successfully';
       exit 0;

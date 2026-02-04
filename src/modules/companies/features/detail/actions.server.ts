@@ -14,10 +14,8 @@ const ERROR_CODES = {
  * Obtiene una company por ID (solo si el usuario es miembro)
  */
 export async function getCompanyById(companyId: string) {
-  logger.info('getCompanyById called', { data: { companyId, type: typeof companyId } });
   const { userId } = await auth();
   if (!userId) throw new Error('No autenticado');
-  logger.info('userId obtained', { data: { userId } });
 
   if (!companyId) {
     logger.error('companyId is undefined');
@@ -26,27 +24,44 @@ export async function getCompanyById(companyId: string) {
 
   try {
     // Verificar que el usuario es miembro
-    const membership = await prisma.companyMember.findMany({
+    const membership = await prisma.companyMember.findFirst({
       where: {
         userId,
-        companyId: companyId,
+        companyId,
+        isActive: true,
       },
-      include: {
-        company: {
-          select: { isActive: true },
-        },
+      select: {
+        isOwner: true,
       },
     });
 
-    if (!membership || !membership[0].isActive) {
+    if (!membership) {
       throw new Error(ERROR_CODES.Forbidden);
     }
 
     const company = await prisma.company.findUnique({
       where: { id: companyId },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        taxId: true,
+        taxStatus: true,
+        description: true,
+        email: true,
+        phone: true,
+        address: true,
+        country: true,
+        industry: true,
+        logoUrl: true,
+        isActive: true,
+        isSingleCompany: true,
+        createdAt: true,
+        updatedAt: true,
         province: true,
         city: true,
+        provinceId: true,
+        cityId: true,
         _count: {
           select: { members: true },
         },
@@ -59,7 +74,7 @@ export async function getCompanyById(companyId: string) {
 
     return {
       ...company,
-      isOwner: membership[0].isOwner,
+      isOwner: membership.isOwner,
       memberCount: company._count.members,
     };
   } catch (error) {

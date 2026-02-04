@@ -85,6 +85,7 @@ export async function CompanyEdit({ companyId }: CompanyEditPageProps) {
             defaultValues={{
               name: company.name,
               taxId: company.taxId ?? undefined,
+              taxStatus: company.taxStatus ?? undefined,
               description: company.description ?? undefined,
               email: company.email ?? undefined,
               phone: company.phone ?? undefined,

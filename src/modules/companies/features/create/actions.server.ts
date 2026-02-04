@@ -5,9 +5,12 @@ import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
 import { revalidateCompanyRoutes } from '@/modules/companies/shared/utils';
 
+import { TaxStatus } from '@/generated/prisma/enums';
+
 export interface CreateCompanyInput {
   name: string;
   taxId?: string;
+  taxStatus?: TaxStatus;
   description?: string;
   email?: string;
   phone?: string;
@@ -49,6 +52,7 @@ export async function createCompany(input: CreateCompanyInput) {
           name: input.name,
           slug: finalSlug,
           taxId: input.taxId,
+          taxStatus: input.taxStatus,
           description: input.description,
           email: input.email,
           phone: input.phone,
@@ -90,7 +94,17 @@ export async function createCompany(input: CreateCompanyInput) {
 
     return result;
   } catch (error) {
-    logger.error('Error al crear company', { data: { error, userId } });
+    logger.error('Error al crear company', { 
+      data: { 
+        error, 
+        userId,
+        errorMessage: error instanceof Error ? error.message : 'Error desconocido',
+        errorStack: error instanceof Error ? error.stack : undefined
+      } 
+    });
+    if (error instanceof Error) {
+      throw new Error(`Error al crear empresa: ${error.message}`);
+    }
     throw new Error('Error al crear empresa');
   }
 }

@@ -122,6 +122,14 @@ export async function CompanyDetailPage(props: CompanyDetailPageProps) {
                   <p>{company.taxId}</p>
                 </div>
               )}
+              {company.taxStatus && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Tipo de Contribuyente</p>
+                  <p>{company.taxStatus === 'RESPONSABLE_INSCRIPTO' ? 'Responsable Inscripto'
+                     : company.taxStatus === 'MONOTRIBUTO' ? 'Monotributo'
+                     : 'Exento'}</p>
+                </div>
+              )}
               {company.industry && (
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Industria</p>

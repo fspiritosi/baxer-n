@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { Controller } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
+import { TaxStatus } from '@/generated/prisma/enums';
 
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
@@ -29,6 +30,7 @@ import { updateCompany } from '../../features/edit/actions.server';
 const companySchema = z.object({
   name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
   taxId: z.string().optional(),
+  taxStatus: z.nativeEnum(TaxStatus).optional(),
   description: z.string().optional(),
   email: z.string().email('Email inválido').optional().or(z.literal('')),
   phone: z.string().optional(),
@@ -75,7 +77,7 @@ export function _CompanyForm({
 
   useEffect(() => {
     if (!provinceId) {
-      form.setValue('cityId', undefined);
+      form.setValue('cityId', null as any);
     }
   }, [provinceId, form.setValue]);
 
@@ -86,6 +88,7 @@ export function _CompanyForm({
       const input = {
         name: formData.name,
         taxId: formData.taxId || undefined,
+        taxStatus: formData.taxStatus as TaxStatus | undefined,
         description: formData.description || undefined,
         email: formData.email || undefined,
         phone: formData.phone || undefined,
@@ -143,6 +146,31 @@ export function _CompanyForm({
             data-testid="company-taxid-input"
             {...form.register('taxId')}
             disabled={isLoading}
+          />
+        </div>
+
+        {/* Tipo de Contribuyente */}
+        <div className="space-y-2">
+          <Label htmlFor="taxStatus">Tipo de Contribuyente</Label>
+          <Controller
+            control={form.control}
+            name="taxStatus"
+            render={({ field }) => (
+              <Select
+                onValueChange={field.onChange}
+                value={field.value}
+                disabled={isLoading}
+              >
+                <SelectTrigger id="taxStatus" data-testid="company-tax-status-select">
+                  <SelectValue placeholder="Seleccionar tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={TaxStatus.RESPONSABLE_INSCRIPTO}>Responsable Inscripto</SelectItem>
+                  <SelectItem value={TaxStatus.MONOTRIBUTO}>Monotributo</SelectItem>
+                  <SelectItem value={TaxStatus.EXENTO}>Exento</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           />
         </div>
 

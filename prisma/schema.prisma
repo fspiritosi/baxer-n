@@ -65,11 +65,21 @@ model City {
 // EMPRESAS Y MIEMBROS
 // ============================================
 
+// Tipo de Contribuyente
+enum TaxStatus {
+  RESPONSABLE_INSCRIPTO
+  MONOTRIBUTO
+  EXENTO
+
+  @@map("tax_status")
+}
+
 model Company {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name         String
-  slug         String?  @unique
-  taxId        String?  @unique @map("tax_id") // CUIT/RUT/etc
+  slug         String?   @unique
+  taxId        String?   @unique @map("tax_id") // CUIT/RUT/etc
+  taxStatus    TaxStatus? @map("tax_status")
   description  String?
   website      String?
   email        String?

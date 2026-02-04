@@ -87,30 +87,30 @@ export interface InstanceConfig {
  */
 export const instanceConfig: InstanceConfig = {
   // Identificador único (lowercase, sin espacios)
-  id: 'acme-logistics',
+  id: 'nahuel-boxer',
 
   // Branding
-  name: 'ACME Logistics',
-  shortName: 'AL',
-  description: 'Sistema de gestión de recursos humanos - ACME Logistics S.A.',
+  name: 'Nahuel Boxer',
+  shortName: 'NB',
+  description: 'Sistema de gestión de repuestos - Nahuel Boxer S.A.',
 
   // Puertos (cambiar si corres múltiples instancias)
   ports: {
     app: 3001,
-    database: 5433,
+    database: 5533,
     minioApi: 9002,
     minioConsole: 9003,
   },
 
   // Base de datos
   database: {
-    name: 'acme_logistics',
+    name: 'nahuel-boxer-db',
     user: 'postgres',
   },
 
   // Storage
   storage: {
-    bucket: 'acme-docs',
+    bucket: 'nahuel-boxer-docs',
     region: 'us-east-1',
   },
 };
