@@ -1,0 +1,61 @@
+import { notFound } from 'next/navigation';
+
+import { Card, CardContent } from '@/shared/components/ui/card';
+import { UrlTabsContent } from '@/shared/components/ui/url-tabs';
+import { formatDateTime } from '@/shared/utils/formatters';
+
+import { getClientDetailById } from './actions.server';
+import { _ClientHeader } from './components/_ClientHeader';
+import { _ClientDetailTabs, type ClientDetailTab } from './components/_ClientDetailTabs';
+import { _GeneralInfoTab } from './components/_GeneralInfoTab';
+import { _VehiclesTab } from './components/_VehiclesTab';
+import { _EmployeesTab } from './components/_EmployeesTab';
+
+interface Props {
+  id: string;
+  searchParams?: { tab?: string };
+}
+
+export async function ClientDetail({ id, searchParams }: Props) {
+  let client;
+  try {
+    client = await getClientDetailById(id);
+  } catch {
+    notFound();
+  }
+
+  const validTabs: ClientDetailTab[] = ['general', 'vehicles', 'employees'];
+  const currentTab: ClientDetailTab = validTabs.includes(searchParams?.tab as ClientDetailTab)
+    ? (searchParams?.tab as ClientDetailTab)
+    : 'general';
+
+  return (
+    <div className="space-y-6">
+      <_ClientHeader client={client} />
+
+      <_ClientDetailTabs clientId={client.id} currentTab={currentTab}>
+        <UrlTabsContent value="general" className="mt-6">
+          <_GeneralInfoTab client={client} />
+        </UrlTabsContent>
+
+        <UrlTabsContent value="vehicles" className="mt-6">
+          <_VehiclesTab client={client} />
+        </UrlTabsContent>
+
+        <UrlTabsContent value="employees" className="mt-6">
+          <_EmployeesTab client={client} />
+        </UrlTabsContent>
+      </_ClientDetailTabs>
+
+      {/* Timestamps */}
+      <Card>
+        <CardContent className="py-4">
+          <div className="flex flex-col gap-2 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+            <span>Creado: {formatDateTime(client.createdAt)}</span>
+            <span>Última actualización: {formatDateTime(client.updatedAt)}</span>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

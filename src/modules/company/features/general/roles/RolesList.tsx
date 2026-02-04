@@ -1,0 +1,48 @@
+import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
+import { PermissionGuard } from '@/shared/components/common/PermissionGuard';
+import { getModulePermissions } from '@/shared/lib/permissions';
+
+import {
+  getRolesPaginated,
+  getSystemActions,
+  getPermissionsConfig,
+} from './actions.server';
+import { _RolesDataTable } from './components/_RolesDataTable';
+
+interface Props {
+  searchParams: DataTableSearchParams;
+}
+
+export async function RolesList({ searchParams }: Props) {
+  const [rolesResult, systemActions, permissionsConfig, permissions] =
+    await Promise.all([
+      getRolesPaginated(searchParams),
+      getSystemActions(),
+      getPermissionsConfig(),
+      getModulePermissions('company.general.roles'),
+    ]);
+
+  return (
+    <PermissionGuard module="company.general.roles" action="view" redirect>
+      <div className="space-y-6">
+        <div>
+          <h1 data-testid="roles-page-title" className="text-3xl font-bold tracking-tight">
+            Roles
+          </h1>
+          <p className="text-muted-foreground">
+            Configura los roles y permisos de tu empresa
+          </p>
+        </div>
+
+        <_RolesDataTable
+          data={rolesResult.data}
+          totalRows={rolesResult.total}
+          searchParams={searchParams}
+          systemActions={systemActions}
+          permissionsConfig={permissionsConfig}
+          permissions={permissions}
+        />
+      </div>
+    </PermissionGuard>
+  );
+}

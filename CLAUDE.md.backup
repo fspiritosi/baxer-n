@@ -1,0 +1,1852 @@
+# CLAUDE.md - Guía Completa del Proyecto NewProject
+
+Este archivo es la **guía definitiva** para trabajar en este proyecto. Contiene todas las reglas, convenciones, arquitectura y patrones que DEBEN seguirse.
+
+---
+
+## ÍNDICE
+
+1. [Tech Stack](#1-tech-stack)
+2. [Arquitectura General](#2-arquitectura-general)
+3. [Estructura del Proyecto](#3-estructura-del-proyecto)
+4. [Módulos y Features](#4-módulos-y-features)
+5. [Route Groups en App Router](#5-route-groups-en-app-router)
+6. [Reglas Críticas](#6-reglas-críticas)
+7. [Server Components First](#7-server-components-first)
+8. [Server Actions](#8-server-actions)
+9. [Comunicación entre Módulos](#9-comunicación-entre-módulos)
+10. [Fetching con React Query](#10-fetching-con-react-query)
+11. [Sistema de Permisos](#11-sistema-de-permisos)
+12. [Componentes UI y shadcn](#12-componentes-ui-y-shadcn)
+13. [Formularios](#13-formularios)
+14. [Base de Datos con Prisma](#14-base-de-datos-con-prisma)
+15. [Nomenclaturas y Convenciones](#15-nomenclaturas-y-convenciones)
+16. [Logger y Debugging](#16-logger-y-debugging)
+17. [Comandos Disponibles](#17-comandos-disponibles)
+18. [Checklists](#18-checklists)
+19. [Testing con Cypress](#19-testing-con-cypress)
+20. [Storage (MinIO/R2)](#20-storage-minior2)
+
+---
+
+## 1. TECH STACK
+
+```
+Framework:        Next.js 16.1.3 + React 19 (App Router, Server Components)
+Base de Datos:    PostgreSQL + Prisma ORM 7
+Estado Global:    Zustand (global) + Jotai (atómico)
+Estado Servidor:  React Query (TanStack Query v5)
+UI:               shadcn/ui + Tailwind CSS v4 + Lucide Icons
+Formularios:      React Hook Form + Zod (validación)
+Autenticación:    Clerk
+Storage:          MinIO (dev) / Cloudflare R2 (prod) - API S3
+Fechas:           moment.js (NUNCA date-fns)
+Notificaciones:   Sonner
+```
+
+### Versiones Clave
+- Node.js: 18+ (recomendado 20+)
+- Next.js: 16.1.3
+- React: 19.2.3
+- TypeScript: 5+
+- Prisma: 7.2.0 (con adapter @prisma/adapter-pg)
+
+---
+
+## 2. ARQUITECTURA GENERAL
+
+### Concepto: Módulos con Features
+
+La arquitectura separa claramente:
+
+- **Módulos (`modules/`)**: Dominios de negocio completos con lógica CRUD, server actions y tipos
+- **Features**: Sub-funcionalidades dentro de cada módulo (páginas, vistas, formularios)
+- **Shared (`shared/`)**: Código reutilizable entre módulos (UI, hooks, utils, lib)
+- **App (`app/`)**: Solo routing con Route Groups - páginas DELGADAS
+
+### Diagrama de Arquitectura
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         src/app/                                │
+│   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐            │
+│   │   (auth)/   │  │   (core)/   │  │    api/     │            │
+│   │  sign-in    │  │  dashboard  │  │  storage    │            │
+│   │  sign-up    │  │  employees  │  │             │            │
+│   └─────────────┘  │  company    │  └─────────────┘            │
+│                    │  teams...   │                              │
+│                    └─────────────┘                              │
+│   PÁGINAS DELGADAS - Solo importan de modules/                  │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                       src/modules/                              │
+│   ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐      │
+│   │ dashboard │ │ employees │ │  company  │ │   teams   │      │
+│   │ features/ │ │ features/ │ │ features/ │ │ features/ │      │
+│   │ actions   │ │ actions   │ │ actions   │ │ actions   │      │
+│   │ types     │ │ types     │ │ types     │ │ types     │      │
+│   └───────────┘ └───────────┘ └───────────┘ └───────────┘      │
+│   LÓGICA DE NEGOCIO - Server Actions, Componentes, Features    │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        src/shared/                              │
+│   ┌──────────────┐ ┌──────────────┐ ┌──────────────┐           │
+│   │ components/  │ │   hooks/     │ │    lib/      │           │
+│   │  ui/         │ │ useGeography │ │  prisma.ts   │           │
+│   │  layout/     │ │ use-mobile   │ │  logger.ts   │           │
+│   └──────────────┘ └──────────────┘ │  utils.ts    │           │
+│                                      └──────────────┘           │
+│   CÓDIGO COMPARTIDO - Usado por todos los módulos              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 3. ESTRUCTURA DEL PROYECTO
+
+```
+newproject/
+├── prisma/
+│   └── schema.prisma              # Esquema de base de datos
+│
+├── src/
+│   ├── app/                       # 🔥 ROUTING (Route Groups)
+│   │   ├── (auth)/                # Grupo: Autenticación (público)
+│   │   │   ├── sign-in/[[...sign-in]]/
+│   │   │   │   └── page.tsx
+│   │   │   └── sign-up/[[...sign-up]]/
+│   │   │       └── page.tsx
+│   │   │
+│   │   ├── (core)/                # Grupo: App Principal (protegido)
+│   │   │   └── dashboard/         # 🔥 Prefijo /dashboard para toda la app
+│   │   │       ├── layout.tsx     # Layout con Sidebar/Header
+│   │   │       ├── page.tsx       # /dashboard (home)
+│   │   │       ├── employees/     # /dashboard/employees
+│   │   │       │   ├── page.tsx   # → modules/employees (list)
+│   │   │       │   ├── new/
+│   │   │       │   │   └── page.tsx # → modules/employees (create)
+│   │   │       │   └── [id]/
+│   │   │       │       ├── page.tsx # → modules/employees (detail)
+│   │   │       │       └── edit/
+│   │   │       │           └── page.tsx # → modules/employees (edit)
+│   │   │       ├── companies/     # /dashboard/companies
+│   │   │       ├── equipment/     # /dashboard/equipment
+│   │   │       └── company/       # /dashboard/company (configuración)
+│   │   │           ├── unions/    # /dashboard/company/unions
+│   │   │           ├── job-positions/
+│   │   │           ├── job-categories/
+│   │   │           ├── cost-centers/
+│   │   │           ├── contract-types/
+│   │   │           ├── collective-agreements/
+│   │   │           ├── contractors/
+│   │   │           ├── sectors/
+│   │   │           ├── type-operatives/
+│   │   │           ├── vehicle-brands/
+│   │   │           └── vehicle-types/
+│   │   │
+│   │   ├── api/                   # API Routes
+│   │   │   └── storage/[...path]/
+│   │   │
+│   │   ├── layout.tsx             # Layout raíz
+│   │   ├── page.tsx               # Landing/Redirect
+│   │   └── globals.css            # Estilos globales
+│   │
+│   ├── modules/                   # 🔥 DOMINIOS DE NEGOCIO
+│   │   ├── dashboard/
+│   │   │   ├── features/
+│   │   │   │   └── overview/
+│   │   │   │       ├── DashboardOverview.tsx
+│   │   │   │       └── components/
+│   │   │   ├── actions.server.ts
+│   │   │   ├── types.ts
+│   │   │   └── index.ts
+│   │   │
+│   │   ├── employees/
+│   │   │   ├── features/
+│   │   │   │   ├── list/
+│   │   │   │   │   ├── EmployeesList.tsx
+│   │   │   │   │   ├── components/
+│   │   │   │   │   │   └── _EmployeesTable.tsx
+│   │   │   │   │   └── index.ts
+│   │   │   │   ├── detail/
+│   │   │   │   │   ├── EmployeeDetail.tsx
+│   │   │   │   │   └── index.ts
+│   │   │   │   ├── create/
+│   │   │   │   │   ├── EmployeeCreate.tsx
+│   │   │   │   │   ├── components/
+│   │   │   │   │   │   └── _EmployeeForm.tsx
+│   │   │   │   │   └── index.ts
+│   │   │   │   ├── edit/
+│   │   │   │   │   ├── EmployeeEdit.tsx
+│   │   │   │   │   └── index.ts
+│   │   │   │   └── charts/
+│   │   │   │       └── index.ts
+│   │   │   ├── actions.server.ts  # 🔥 Server Actions del módulo
+│   │   │   ├── types.ts           # Tipos del módulo
+│   │   │   ├── hooks/             # Hooks específicos del módulo
+│   │   │   └── index.ts           # Barrel export
+│   │   │
+│   │   ├── teams/
+│   │   │   ├── features/
+│   │   │   ├── actions.server.ts
+│   │   │   ├── types.ts
+│   │   │   └── index.ts
+│   │   │
+│   │   ├── documents/
+│   │   │   ├── features/
+│   │   │   ├── actions.server.ts
+│   │   │   ├── types.ts
+│   │   │   └── index.ts
+│   │   │
+│   │   ├── commercial/
+│   │   │   ├── features/
+│   │   │   ├── actions.server.ts
+│   │   │   ├── types.ts
+│   │   │   └── index.ts
+│   │   │
+│   │   ├── operations/
+│   │   │   ├── features/
+│   │   │   ├── actions.server.ts
+│   │   │   ├── types.ts
+│   │   │   └── index.ts
+│   │   │
+│   │   ├── maintenance/
+│   │   │   ├── features/
+│   │   │   ├── actions.server.ts
+│   │   │   ├── types.ts
+│   │   │   └── index.ts
+│   │   │
+│   │   └── company/               # Módulo Empresa
+│   │       ├── features/
+│   │       │   ├── overview/      # Vista principal de empresa
+│   │       │   ├── unions/        # Sindicatos
+│   │       │   ├── job-positions/ # Puestos de trabajo
+│   │       │   ├── job-categories/# Categorías
+│   │       │   ├── cost-centers/  # Centros de costo
+│   │       │   ├── contract-types/# Tipos de contrato
+│   │       │   └── collective-agreements/ # Convenios colectivos
+│   │       ├── actions.server.ts
+│   │       ├── types.ts
+│   │       └── index.ts
+│   │
+│   ├── shared/                    # 🔥 CÓDIGO COMPARTIDO
+│   │   ├── components/
+│   │   │   ├── ui/                # shadcn/ui components
+│   │   │   │   ├── button.tsx
+│   │   │   │   ├── card.tsx
+│   │   │   │   ├── input.tsx
+│   │   │   │   ├── form.tsx
+│   │   │   │   ├── table.tsx
+│   │   │   │   ├── dialog.tsx
+│   │   │   │   ├── sidebar.tsx
+│   │   │   │   └── ... (otros componentes shadcn)
+│   │   │   │
+│   │   │   ├── layout/            # Componentes de layout
+│   │   │   │   ├── _AppSidebar.tsx
+│   │   │   │   ├── _SiteHeader.tsx
+│   │   │   │   ├── _CompanySelector.tsx
+│   │   │   │   └── nav/
+│   │   │   │       └── _NavUser.tsx
+│   │   │   │
+│   │   │   └── common/            # Componentes comunes
+│   │   │       ├── _PhotoUpload.tsx
+│   │   │       ├── DataTable.tsx
+│   │   │       └── LoadingSkeleton.tsx
+│   │   │
+│   │   ├── hooks/                 # Hooks compartidos
+│   │   │   ├── index.ts
+│   │   │   ├── useGeography.ts
+│   │   │   └── use-mobile.ts
+│   │   │
+│   │   ├── actions/               # Server Actions compartidas
+│   │   │   ├── geography.ts
+│   │   │   └── storage.ts
+│   │   │
+│   │   ├── lib/                   # Core utilities
+│   │   │   ├── prisma.ts          # Cliente Prisma
+│   │   │   ├── logger.ts          # Logger personalizado
+│   │   │   ├── utils.ts           # cn() y utilidades
+│   │   │   ├── company.ts         # getActiveCompany()
+│   │   │   └── storage.ts         # S3 presigned URLs
+│   │   │
+│   │   ├── types/                 # Tipos globales
+│   │   │   └── index.ts
+│   │   │
+│   │   └── zodSchemas/            # Schemas Zod compartidos
+│   │       └── index.ts
+│   │
+│   ├── providers/                 # React Context Providers
+│   │   ├── index.tsx              # Provider combinado
+│   │   ├── QueryProvider.tsx      # React Query
+│   │   └── SessionProvider.tsx    # Clerk
+│   │
+│   └── generated/                 # Auto-generado
+│       └── prisma/                # Cliente Prisma generado
+│
+├── cypress/                       # Tests E2E
+│   ├── e2e/
+│   ├── fixtures/
+│   └── support/
+│
+├── middleware.ts                  # Middleware de autenticación
+├── .env                           # Variables de entorno
+├── docker-compose.yml             # Base de datos local
+└── CLAUDE.md                      # Este archivo
+```
+
+---
+
+## 4. MÓDULOS Y FEATURES
+
+### Los 8 Módulos del Sistema
+
+| Módulo | Descripción | Ruta Base |
+|--------|-------------|-----------|
+| `dashboard` | Vista principal, métricas | `/dashboard` |
+| `employees` | Gestión de empleados | `/employees` |
+| `teams` | Equipos de trabajo | `/teams` |
+| `documents` | Documentación | `/documents` |
+| `commercial` | Área comercial | `/commercial` |
+| `operations` | Operaciones | `/operations` |
+| `maintenance` | Mantenimiento | `/maintenance` |
+| `company` | Configuración de empresa | `/company` |
+
+### Estructura de un Módulo
+
+```
+modules/{module-name}/
+├── features/                  # 🔥 Sub-funcionalidades (cada página = feature)
+│   ├── list/                  # Listado
+│   │   ├── {Module}List.tsx   # Server Component principal
+│   │   ├── actions.server.ts  # 🔥 Actions SOLO de esta feature
+│   │   ├── components/
+│   │   │   └── _{Module}Table.tsx  # Client Component
+│   │   └── index.ts
+│   ├── detail/                # Detalle/Ver
+│   │   ├── {Module}Detail.tsx
+│   │   ├── actions.server.ts  # 🔥 Actions SOLO de esta feature
+│   │   └── index.ts
+│   ├── create/                # Crear nuevo
+│   │   ├── {Module}Create.tsx
+│   │   ├── actions.server.ts  # 🔥 Actions SOLO de esta feature
+│   │   └── index.ts
+│   ├── edit/                  # Editar existente
+│   │   ├── {Module}Edit.tsx
+│   │   ├── actions.server.ts  # 🔥 Actions SOLO de esta feature
+│   │   └── index.ts
+│   └── {custom}/              # Features específicas del módulo
+│
+├── types.ts                   # Tipos compartidos del módulo (si los hay)
+├── hooks/                     # Hooks específicos (opcional)
+│   └── use{Module}.ts
+└── index.ts                   # Barrel export de todas las features
+```
+
+**IMPORTANTE**: Cada feature tiene su propio `actions.server.ts` con SOLO las acciones que necesita. NO crear un archivo monolítico de acciones a nivel de módulo.
+
+### Ejemplo: Módulo Employees
+
+```
+modules/employees/
+├── features/
+│   ├── list/
+│   │   ├── EmployeesList.tsx          # Server Component
+│   │   ├── actions.server.ts          # getAllEmployees, deleteEmployee
+│   │   ├── components/
+│   │   │   └── _EmployeesTable.tsx
+│   │   └── index.ts
+│   ├── detail/
+│   │   ├── EmployeeDetail.tsx         # Server Component
+│   │   ├── actions.server.ts          # getEmployeeById
+│   │   ├── components/
+│   │   │   ├── _EmployeeHeader.tsx
+│   │   │   ├── _PersonalInfoTab.tsx
+│   │   │   ├── _ContactTab.tsx
+│   │   │   └── _WorkInfoTab.tsx
+│   │   └── index.ts
+│   ├── create/
+│   │   ├── EmployeeCreate.tsx         # Server Component
+│   │   ├── actions.server.ts          # createEmployee, getNextEmployeeNumber
+│   │   ├── components/
+│   │   │   └── _EmployeeForm.tsx
+│   │   └── index.ts
+│   ├── edit/
+│   │   ├── EmployeeEdit.tsx           # Server Component
+│   │   ├── actions.server.ts          # updateEmployee, getEmployeeForEdit
+│   │   └── index.ts
+│   └── charts/                        # Feature adicional (opcional)
+│       ├── EmployeeCharts.tsx
+│       ├── actions.server.ts
+│       └── index.ts
+│
+├── types.ts                   # Tipos compartidos (si los hay)
+└── index.ts                   # Barrel export con aliases backward-compatible
+```
+
+### Ejemplo: Módulo Company (con sub-features)
+
+```
+modules/company/
+├── features/
+│   ├── overview/              # /company
+│   │   ├── CompanyOverview.tsx
+│   │   └── index.ts
+│   ├── unions/                # /company/unions
+│   │   ├── UnionsList.tsx
+│   │   ├── UnionDetail.tsx
+│   │   ├── components/
+│   │   │   └── _UnionsTable.tsx
+│   │   └── index.ts
+│   ├── job-positions/         # /company/job-positions
+│   │   ├── JobPositionsList.tsx
+│   │   ├── components/
+│   │   │   └── _JobPositionsTable.tsx
+│   │   └── index.ts
+│   ├── job-categories/        # /company/job-categories
+│   ├── cost-centers/          # /company/cost-centers
+│   ├── contract-types/        # /company/contract-types
+│   └── collective-agreements/ # /company/collective-agreements
+│
+├── actions.server.ts          # Acciones de TODOS los sub-features
+├── types.ts
+└── index.ts
+```
+
+### Barrel Export del Módulo
+
+```typescript
+// modules/employees/index.ts
+export { EmployeesList } from './features/list';
+export { EmployeeDetail } from './features/detail';
+export { EmployeeCreate } from './features/create';
+export { EmployeeEdit } from './features/edit';
+export { EmployeeCharts } from './features/charts';
+
+// Server Actions
+export * from './actions.server';
+
+// Types
+export type * from './types';
+```
+
+---
+
+## 5. ROUTE GROUPS EN APP ROUTER
+
+### Grupos de Rutas
+
+Todas las rutas de la aplicación principal están bajo el prefijo `/dashboard`:
+
+```
+app/
+├── (auth)/                    # Rutas de autenticación (públicas)
+│   ├── sign-in/
+│   └── sign-up/
+│
+├── (core)/                    # Rutas principales (protegidas)
+│   └── dashboard/             # 🔥 Prefijo /dashboard para toda la app
+│       ├── layout.tsx         # DashboardLayout con Sidebar/Header
+│       ├── page.tsx           # /dashboard (home)
+│       ├── employees/         # /dashboard/employees
+│       ├── companies/         # /dashboard/companies
+│       ├── equipment/         # /dashboard/equipment
+│       └── company/           # /dashboard/company (configuración)
+│           ├── unions/        # /dashboard/company/unions
+│           ├── job-positions/ # /dashboard/company/job-positions
+│           └── ...
+│
+└── api/                       # API Routes
+```
+
+### URLs Resultantes
+
+| Ruta en app/ | URL Final |
+|--------------|-----------|
+| `(core)/dashboard/page.tsx` | `/dashboard` |
+| `(core)/dashboard/employees/page.tsx` | `/dashboard/employees` |
+| `(core)/dashboard/employees/new/page.tsx` | `/dashboard/employees/new` |
+| `(core)/dashboard/employees/[id]/page.tsx` | `/dashboard/employees/123` |
+| `(core)/dashboard/company/unions/page.tsx` | `/dashboard/company/unions` |
+
+### Página DELGADA - Patrón Correcto
+
+```typescript
+// src/app/(core)/dashboard/employees/page.tsx
+import { EmployeesPage } from '@/modules/employees';
+
+export const metadata: Metadata = { title: 'Empleados' };
+
+export default function Page() {
+  return <EmployeesPage />;
+}
+```
+
+```typescript
+// src/app/(core)/dashboard/employees/[id]/page.tsx
+import { EmployeeDetailPage } from '@/modules/employees';
+
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  return <EmployeeDetailPage id={id} />;
+}
+```
+
+```typescript
+// src/app/(core)/dashboard/company/unions/page.tsx
+import { UnionsPage } from '@/modules/company';
+
+export const metadata: Metadata = { title: 'Sindicatos' };
+
+export default function Page() {
+  return <UnionsPage />;
+}
+```
+
+### Layout del Core
+
+```typescript
+// src/app/(core)/layout.tsx
+import { AppSidebar, SiteHeader } from '@/shared/components/layout';
+import { SidebarProvider, SidebarInset } from '@/shared/components/ui/sidebar';
+
+export default function CoreLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <SidebarProvider>
+      <AppSidebar />
+      <SidebarInset>
+        <SiteHeader />
+        <main className="flex-1 p-6">{children}</main>
+      </SidebarInset>
+    </SidebarProvider>
+  );
+}
+```
+
+---
+
+## 6. REGLAS CRÍTICAS
+
+### REGLA 0: Tipado SIEMPRE desde Prisma o Zod - NUNCA manual
+
+```typescript
+// ❌ NUNCA - Mapeos manuales de enums que existen en Prisma
+const genderLabels: Record<string, string> = {
+  MALE: 'Masculino',
+  FEMALE: 'Femenino',
+  NOT_DECLARED: 'No declarado',
+};
+
+// ✅ SIEMPRE - Usar el enum de Prisma y crear mapeo tipado
+import { Gender } from '@/generated/prisma/enums';
+
+const genderLabels: Record<Gender, string> = {
+  MALE: 'Masculino',
+  FEMALE: 'Femenino',
+  NOT_DECLARED: 'No declarado',
+};
+
+// ❌ NUNCA - Valores que NO existen en el enum de Prisma
+const statusLabels = {
+  ACTIVE: 'Activo',        // ¡Este valor NO existe en EmployeeStatus!
+  PENDING_REVIEW: 'Pendiente', // ¡Este tampoco!
+};
+
+// ✅ SIEMPRE - Verificar que los valores coincidan con Prisma
+import { EmployeeStatus } from '@/generated/prisma/enums';
+
+const statusLabels: Record<EmployeeStatus, string> = {
+  INCOMPLETE: 'Incompleto',
+  COMPLETE: 'Completo',
+  COMPLETE_EXPIRED_DOCS: 'Docs Vencidos',
+  APPROVED: 'Aprobado',
+  NOT_APPROVED: 'No Aprobado',
+};
+```
+
+### Regla de Tipado - Orden de Preferencia
+
+1. **Prisma Enums**: Si el valor viene de la BD, usar `@/generated/prisma/enums`
+2. **Prisma Types**: Para modelos, usar tipos inferidos de las queries
+3. **Zod Schemas**: Para formularios, inferir de `z.infer<typeof schema>`
+4. **Manual SOLO si**: Es un tipo compuesto que no existe en ningún lado
+
+```typescript
+// 1. Enums de Prisma
+import { Gender, EmployeeStatus, CostType } from '@/generated/prisma/enums';
+
+// 2. Tipos inferidos de queries
+export type Employee = Awaited<ReturnType<typeof getEmployeeById>>;
+
+// 3. Tipos de Zod
+const employeeSchema = z.object({ ... });
+type EmployeeFormData = z.infer<typeof employeeSchema>;
+
+// 4. Solo si no existe en ningún lado
+interface EmployeeWithCalculatedFields {
+  employee: Employee;
+  age: number;
+  seniority: string;
+}
+```
+
+### REGLA 1: NO usar `:any` - SIEMPRE inferir tipos
+
+```typescript
+// ❌ NUNCA
+const data: any = await fetchData();
+function process(item: any) { ... }
+
+// ✅ SIEMPRE inferir tipos
+export type Employee = Awaited<ReturnType<typeof getEmployeeById>>;
+export type EmployeeList = Awaited<ReturnType<typeof getAllEmployees>>;
+
+// ✅ Para arrays
+type Employee = EmployeeList[number];
+```
+
+### REGLA 2: Server Actions en el módulo, NO en carpeta separada
+
+```typescript
+// ❌ NUNCA crear carpeta src/app/server/
+// ❌ NUNCA src/actions/ a nivel global
+
+// ✅ SIEMPRE en el módulo correspondiente
+// src/modules/employees/actions.server.ts
+'use server';
+
+import { prisma } from '@/shared/lib/prisma';
+
+export async function getAllEmployees() {
+  return await prisma.employee.findMany();
+}
+
+// ✅ O en shared si se usa en múltiples módulos
+// src/shared/actions/geography.ts
+'use server';
+
+export async function getAllCountries() { ... }
+```
+
+### REGLA 3: Logger, NUNCA console.*
+
+```typescript
+// ❌ NUNCA
+console.log('mensaje');
+console.error('error');
+
+// ✅ SIEMPRE
+import { logger, Logger } from '@/shared/lib/logger';
+
+// Logger global
+logger.info('mensaje');
+logger.error('error', { data: { error } });
+
+// Logger con scope
+const log = new Logger('MiComponente');
+log.info('mensaje');
+```
+
+### REGLA 4: moment.js para fechas, NUNCA date-fns
+
+```typescript
+// ❌ NUNCA
+import { format } from 'date-fns';
+
+// ✅ SIEMPRE
+import moment from 'moment';
+moment(date).format('DD/MM/YYYY');
+```
+
+### REGLA 5: Componentes Cliente inician con `_`
+
+```typescript
+// Server Component (por defecto)
+modules/employees/features/list/EmployeesList.tsx
+
+// Client Component (interactividad)
+modules/employees/features/list/components/_EmployeesTable.tsx  // ← Nota el _
+```
+
+### REGLA 6: Queries eficientes - NO N+1
+
+```typescript
+// ❌ NUNCA - N+1 Query
+const employees = await prisma.employee.findMany();
+for (const emp of employees) {
+  const department = await prisma.department.findUnique({...});
+}
+
+// ✅ SIEMPRE - Una sola query con relaciones
+const employees = await prisma.employee.findMany({
+  include: { department: true }
+});
+```
+
+### REGLA 7: Módulos NO importan de otros módulos
+
+```typescript
+// ❌ INCORRECTO - Módulo importa de otro módulo
+// En modules/employees/...
+import { someUtil } from '@/modules/company/utils';
+
+// ✅ CORRECTO - Usar shared para código compartido
+import { someUtil } from '@/shared/utils/someUtil';
+```
+
+### REGLA 8: Utils y Mappers en shared/ - NUNCA inline en componentes
+
+```typescript
+// ❌ NUNCA - Helpers y mapeos inline en componentes
+// modules/employees/features/detail/EmployeeDetail.tsx
+function formatDate(date: Date) { ... }  // ¡NO inline!
+const genderLabels = { ... };             // ¡NO inline!
+
+export function EmployeeDetail() {
+  // ...
+}
+
+// ✅ SIEMPRE - Utils en shared/utils/
+// shared/utils/formatters.ts
+import moment from 'moment';
+
+export function formatDate(date: Date | string | null): string {
+  if (!date) return 'No especificada';
+  return moment(date).format('DD/MM/YYYY');
+}
+
+export function calculateAge(birthDate: Date | string | null): number | null {
+  if (!birthDate) return null;
+  return moment().diff(moment(birthDate), 'years');
+}
+
+// ✅ SIEMPRE - Mappers en shared/utils/mappers.ts
+// shared/utils/mappers.ts
+import {
+  Gender,
+  EmployeeStatus,
+  MaritalStatus,
+  EducationLevel,
+  CostType,
+  UnionAffiliationStatus,
+} from '@/generated/prisma/enums';
+
+export const genderLabels: Record<Gender, string> = {
+  MALE: 'Masculino',
+  FEMALE: 'Femenino',
+  NOT_DECLARED: 'No declarado',
+};
+
+export const employeeStatusLabels: Record<EmployeeStatus, string> = {
+  INCOMPLETE: 'Incompleto',
+  COMPLETE: 'Completo',
+  COMPLETE_EXPIRED_DOCS: 'Documentos Vencidos',
+  APPROVED: 'Aprobado',
+  NOT_APPROVED: 'No Aprobado',
+};
+
+// Con variantes de Badge
+export const employeeStatusBadges: Record<EmployeeStatus, {
+  label: string;
+  variant: 'default' | 'secondary' | 'destructive' | 'outline'
+}> = {
+  INCOMPLETE: { label: 'Incompleto', variant: 'secondary' },
+  COMPLETE: { label: 'Completo', variant: 'outline' },
+  COMPLETE_EXPIRED_DOCS: { label: 'Docs Vencidos', variant: 'destructive' },
+  APPROVED: { label: 'Aprobado', variant: 'default' },
+  NOT_APPROVED: { label: 'No Aprobado', variant: 'destructive' },
+};
+```
+
+### REGLA 9: Componentes pequeños y reutilizables - NO mega-componentes
+
+```typescript
+// ❌ NUNCA - Un componente de 300+ líneas con todo inline
+// EmployeeDetailPage.tsx con helpers, mapeos, InfoField, tabs, etc.
+
+// ✅ SIEMPRE - Componentes pequeños y reutilizables
+// shared/components/common/InfoField.tsx
+interface InfoFieldProps {
+  label: string;
+  value: string | null | undefined;
+  fallback?: string;
+}
+
+export function InfoField({ label, value, fallback = 'No especificado' }: InfoFieldProps) {
+  return (
+    <div className="space-y-1">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="font-medium">{value || fallback}</p>
+    </div>
+  );
+}
+
+// Uso en features
+import { InfoField } from '@/shared/components/common/InfoField';
+import { formatDate, calculateAge } from '@/shared/utils/formatters';
+import { genderLabels } from '@/shared/utils/mappers';
+
+<InfoField label="Género" value={genderLabels[employee.gender]} />
+<InfoField label="Fecha de Nacimiento" value={formatDate(employee.birthDate)} />
+```
+
+### REGLA 10: Features con su propia estructura - NO archivos sueltos
+
+```typescript
+// ❌ INCORRECTO - Archivos sueltos en el root del módulo
+modules/employees/
+├── EmployeesPage.tsx           // ❌ Suelto
+├── EmployeeDetailPage.tsx      // ❌ Suelto
+├── EmployeeEditPage.tsx        // ❌ Suelto
+├── EmployeeNewPage.tsx         // ❌ Suelto
+├── actionsServer.ts            // ❌ TODAS las actions juntas (500+ líneas)
+└── components/
+    └── _EmployeeForm.tsx       // ❌ Un form gigante para todo
+
+// ✅ CORRECTO - Cada página es una feature con su estructura
+modules/employees/
+├── features/
+│   ├── list/                   # Feature: Lista de empleados
+│   │   ├── EmployeesList.tsx   # Server Component
+│   │   ├── actions.server.ts   # Solo: getAllEmployees, getEmployeesForSelect
+│   │   ├── components/
+│   │   │   └── _EmployeesTable.tsx
+│   │   └── index.ts
+│   │
+│   ├── detail/                 # Feature: Detalle de empleado
+│   │   ├── EmployeeDetail.tsx
+│   │   ├── actions.server.ts   # Solo: getEmployeeById
+│   │   ├── components/
+│   │   │   ├── _PersonalInfoTab.tsx
+│   │   │   ├── _ContactTab.tsx
+│   │   │   └── _WorkInfoTab.tsx
+│   │   └── index.ts
+│   │
+│   ├── create/                 # Feature: Crear empleado
+│   │   ├── EmployeeCreate.tsx
+│   │   ├── actions.server.ts   # Solo: createEmployee, getNextEmployeeNumber
+│   │   ├── components/
+│   │   │   └── _EmployeeForm.tsx
+│   │   └── index.ts
+│   │
+│   └── edit/                   # Feature: Editar empleado
+│       ├── EmployeeEdit.tsx
+│       ├── actions.server.ts   # Solo: updateEmployee, terminateEmployee
+│       └── index.ts
+│
+├── types.ts                    # Tipos compartidos del módulo (si los hay)
+└── index.ts                    # Barrel export de todas las features
+```
+
+### REGLA 11: Queries optimizadas - usar `select` para traer solo lo necesario
+
+```typescript
+// ❌ NUNCA - Traer todos los campos cuando solo necesitas algunos
+const employees = await prisma.employee.findMany({
+  include: {
+    jobPosition: true,      // Trae TODOS los campos
+    contractType: true,     // Trae TODOS los campos
+    nationality: true,      // Trae TODOS los campos
+  }
+});
+
+// ✅ SIEMPRE - Usar select para traer solo lo que se usa
+const employees = await prisma.employee.findMany({
+  include: {
+    jobPosition: { select: { id: true, name: true } },
+    contractType: { select: { id: true, name: true } },
+    nationality: { select: { id: true, name: true } },
+  }
+});
+
+// ✅ Para selects/dropdowns - SIEMPRE usar select mínimo
+const selectForDropdown = { id: true, name: true } as const;
+
+const options = await prisma.jobPosition.findMany({
+  where: { companyId, isActive: true },
+  select: selectForDropdown,
+  orderBy: { name: 'asc' },
+});
+
+// ✅ Para mutations - retornar solo el id después de crear/actualizar
+const employee = await prisma.employee.create({
+  data: { ... },
+  select: { id: true },  // No necesitas el objeto completo
+});
+
+// ✅ Para verificaciones de existencia - solo traer id
+const existing = await prisma.employee.findFirst({
+  where: { id, companyId },
+  select: { id: true },  // Solo verificas si existe
+});
+```
+
+### REGLA 12: `getActiveCompanyId()` en Server Actions, `getActiveCompany()` solo en UI
+
+```typescript
+// ❌ NUNCA en server actions - trae datos innecesarios
+// modules/employees/features/list/actions.server.ts
+import { getActiveCompany } from '@/shared/lib/company';
+
+export async function getAllEmployees() {
+  const company = await getActiveCompany();  // Trae province, city, _count...
+  if (!company) throw new Error('No hay empresa activa');
+  
+  return prisma.employee.findMany({
+    where: { companyId: company.id },  // Solo usas el id
+  });
+}
+
+// ✅ SIEMPRE en server actions - versión ligera
+import { getActiveCompanyId } from '@/shared/lib/company';
+
+export async function getAllEmployees() {
+  const companyId = await getActiveCompanyId();  // Solo trae el id
+  if (!companyId) throw new Error('No hay empresa activa');
+  
+  return prisma.employee.findMany({
+    where: { companyId },
+  });
+}
+
+// ✅ getActiveCompany() SOLO en componentes de UI que muestran datos de la empresa
+// app/(core)/layout.tsx
+import { getActiveCompany } from '@/shared/lib/company';
+
+export default async function Layout({ children }) {
+  const activeCompany = await getActiveCompany();  // Necesita nombre, provincia, etc.
+  return <DashboardLayout activeCompany={activeCompany}>{children}</DashboardLayout>;
+}
+```
+
+### REGLA 13: NUNCA tipar explícitamente el return de funciones - SIEMPRE inferir
+
+```typescript
+// ❌ NUNCA - Tipar manualmente el return
+export async function getEmployeeById(id: string): Promise<Employee | null> {
+  // ...
+}
+
+interface Employee {
+  id: string;
+  name: string;
+  // 50 campos más que hay que mantener manualmente...
+}
+
+// ✅ SIEMPRE - Dejar que TypeScript infiera el tipo
+export async function getEmployeeById(id: string) {
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  return prisma.employee.findFirst({
+    where: { id, companyId },
+    include: { jobPosition: { select: { id: true, name: true } } },
+  });
+}
+
+// ✅ Exportar tipo inferido al final del archivo
+export type Employee = Awaited<ReturnType<typeof getEmployeeById>>;
+export type EmployeeList = Awaited<ReturnType<typeof getAllEmployees>>;
+
+// ✅ Para arrays, extraer el tipo del elemento
+type EmployeeListItem = EmployeeList[number];
+```
+
+---
+
+## 7. SERVER COMPONENTS FIRST
+
+### Regla Fundamental
+
+**Server Components por defecto. Client Components SOLO cuando sea necesario.**
+
+### Cuándo usar Client Component ('use client')
+
+1. **Interactividad**: onClick, onChange, onSubmit
+2. **Estado local**: useState, useReducer
+3. **React Query**: useQuery, useMutation
+4. **Hooks del navegador**: useEffect con window/document
+5. **Context API**: useContext
+
+### Patrón Híbrido en Features
+
+```typescript
+// 1. Server Component (fetching inicial)
+// modules/employees/features/list/EmployeesList.tsx
+import { getAllEmployees } from '../../actions.server';
+import { _EmployeesTable } from './components/_EmployeesTable';
+
+export async function EmployeesList() {
+  const employees = await getAllEmployees();
+  return <_EmployeesTable initialData={employees} />;
+}
+
+// 2. Client Component (interactividad)
+// modules/employees/features/list/components/_EmployeesTable.tsx
+'use client';
+
+import { useQuery } from '@tanstack/react-query';
+import { getAllEmployees } from '../../../actions.server';
+
+interface Props {
+  initialData: Employee[];
+}
+
+export function _EmployeesTable({ initialData }: Props) {
+  const { data } = useQuery({
+    queryKey: ['employees'],
+    queryFn: getAllEmployees,
+    initialData,
+  });
+
+  return <DataTable data={data} />;
+}
+```
+
+---
+
+## 8. SERVER ACTIONS
+
+### Ubicación: actions.server.ts en cada FEATURE (no en módulo)
+
+Cada feature tiene su propio archivo de actions con SOLO las funciones que necesita:
+
+```typescript
+// modules/employees/features/list/actions.server.ts
+'use server';
+
+import { prisma } from '@/shared/lib/prisma';
+import { logger } from '@/shared/lib/logger';
+import { getActiveCompany } from '@/shared/lib/company';
+
+export async function getAllEmployees() {
+  const company = await getActiveCompany();
+  if (!company) throw new Error('No hay empresa activa');
+
+  try {
+    return await prisma.employee.findMany({
+      where: { companyId: company.id },
+      include: { jobPosition: true, contractType: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  } catch (error) {
+    logger.error('Error getting employees', { data: { error } });
+    throw new Error('Error al obtener empleados');
+  }
+}
+
+export async function deleteEmployee(id: string) {
+  // Solo delete en feature list
+}
+
+// Tipo inferido
+export type EmployeeListItem = Awaited<ReturnType<typeof getAllEmployees>>[number];
+```
+
+```typescript
+// modules/employees/features/detail/actions.server.ts
+'use server';
+
+export async function getEmployeeById(id: string) {
+  // Solo getById en feature detail
+}
+
+export type Employee = Awaited<ReturnType<typeof getEmployeeById>>;
+```
+
+```typescript
+// modules/employees/features/create/actions.server.ts
+'use server';
+
+export async function createEmployee(data: CreateEmployeeInput) {
+  // Solo create en feature create
+}
+
+export async function getNextEmployeeNumber() {
+  // Helper específico de create
+}
+```
+
+```typescript
+// modules/employees/features/edit/actions.server.ts
+'use server';
+
+export async function updateEmployee(id: string, data: UpdateEmployeeInput) {
+  // Solo update en feature edit
+}
+
+export async function getEmployeeForEdit(id: string) {
+  // Query específica para edición
+}
+```
+
+### Nomenclatura de Server Actions
+
+| Tipo | Pattern | Ejemplo |
+|------|---------|---------|
+| GET todos | `getAll{Entity}` | `getAllEmployees` |
+| GET filtrado | `get{Filter}{Entity}` | `getActiveEmployees` |
+| GET por ID | `get{Entity}ById` | `getEmployeeById` |
+| GET por relación | `get{Entity}By{Relation}` | `getEmployeesByDepartment` |
+| POST | `create{Entity}` | `createEmployee` |
+| PUT/PATCH | `update{Entity}` | `updateEmployee` |
+| DELETE soft | `softDelete{Entity}` | `softDeleteEmployee` |
+| DELETE hard | `hardDelete{Entity}` | `hardDeleteEmployee` |
+
+---
+
+## 9. COMUNICACIÓN ENTRE MÓDULOS
+
+### Regla: Los módulos NO se comunican directamente
+
+```typescript
+// ❌ INCORRECTO - Módulo A importa de Módulo B
+// En modules/employees/features/create/_EmployeeForm.tsx
+import { getAllDepartments } from '@/modules/company/actions.server';
+
+// ✅ CORRECTO - Usar shared/actions para datos compartidos
+// En shared/actions/catalogs.ts
+'use server';
+
+export async function getAllDepartmentsForSelect(companyId: string) {
+  return await prisma.department.findMany({
+    where: { companyId },
+    select: { id: true, name: true },
+  });
+}
+
+// En modules/employees/features/create/_EmployeeForm.tsx
+import { getAllDepartmentsForSelect } from '@/shared/actions/catalogs';
+```
+
+### Cuándo mover a shared/actions
+
+Mover a `shared/actions/` cuando:
+- La acción se usa en **2+ módulos**
+- Es un catálogo/select usado en formularios de varios módulos
+- Es una operación genérica (geografía, storage, etc.)
+
+### Patrón de Comunicación
+
+```
+┌─────────────────┐     ┌─────────────────┐
+│   Module A      │     │   Module B      │
+│   employees     │     │   company       │
+└────────┬────────┘     └────────┬────────┘
+         │                       │
+         │    NO DIRECTO ✗       │
+         │←─────────────────────→│
+         │                       │
+         ▼                       ▼
+    ┌─────────────────────────────────┐
+    │        shared/actions/          │
+    │   - catalogs.ts                 │
+    │   - geography.ts                │
+    │   - storage.ts                  │
+    └─────────────────────────────────┘
+```
+
+---
+
+## 10. FETCHING CON REACT QUERY
+
+### REGLA CRÍTICA
+
+```typescript
+// ❌ NUNCA - useEffect + useState
+const [data, setData] = useState([]);
+useEffect(() => {
+  fetchData().then(setData);
+}, []);
+
+// ✅ SIEMPRE - useQuery
+const { data, isLoading } = useQuery({
+  queryKey: ['employees'],
+  queryFn: getAllEmployees,
+});
+```
+
+### Hook Pattern por Módulo
+
+```typescript
+// modules/employees/hooks/useEmployees.ts
+'use client';
+
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  getAllEmployees,
+  createEmployee,
+  updateEmployee,
+} from '../actions.server';
+
+export function useEmployees(companyId: string) {
+  return useQuery({
+    queryKey: ['employees', companyId],
+    queryFn: () => getAllEmployees(companyId),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useCreateEmployee() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: createEmployee,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+    },
+  });
+}
+```
+
+---
+
+## 11. SISTEMA DE PERMISOS
+
+### Arquitectura RBAC
+
+```
+modules → features → actions (view, create, update, delete)
+```
+
+### Verificación en Server Actions
+
+```typescript
+// modules/employees/actions.server.ts
+'use server';
+
+import { checkPermission } from '@/shared/lib/permissions';
+
+export async function createEmployee(data: EmployeeInsert) {
+  await checkPermission('employees', 'create');
+  return await prisma.employee.create({ data });
+}
+```
+
+### Verificación en UI
+
+```typescript
+import { PermissionGuard } from '@/shared/components/PermissionGuard';
+
+<PermissionGuard module="employees" action="create">
+  <Button>Crear Empleado</Button>
+</PermissionGuard>
+```
+
+---
+
+## 12. COMPONENTES UI Y SHADCN
+
+### Ubicación
+
+```
+shared/components/ui/          # Componentes shadcn
+shared/components/layout/      # Sidebar, Header, etc.
+shared/components/common/      # DataTable, PhotoUpload, etc.
+```
+
+### Instalación
+
+```bash
+npx shadcn@latest add [componente]
+```
+
+### Uso Correcto
+
+```typescript
+import { Button } from '@/shared/components/ui/button';
+import { Card } from '@/shared/components/ui/card';
+import { AppSidebar } from '@/shared/components/layout';
+import { DataTable } from '@/shared/components/common/DataTable';
+```
+
+### Clase Utility `cn`
+
+```typescript
+import { cn } from '@/shared/lib/utils';
+
+<div className={cn('base', condition && 'conditional')} />
+```
+
+### DataTable - Columnas con `meta.title`
+
+Al definir columnas para DataTable, **siempre incluir `meta: { title: 'X' }`** para que el dropdown "Mostrar columnas" muestre nombres legibles:
+
+```typescript
+// ❌ INCORRECTO - El dropdown mostrará "employeeNumber"
+{
+  accessorKey: 'employeeNumber',
+  header: ({ column }) => (
+    <DataTableColumnHeader column={column} title="Legajo" />
+  ),
+}
+
+// ✅ CORRECTO - El dropdown mostrará "Legajo"
+{
+  accessorKey: 'employeeNumber',
+  meta: { title: 'Legajo' },
+  header: ({ column }) => (
+    <DataTableColumnHeader column={column} title="Legajo" />
+  ),
+}
+```
+
+Ver documentación completa en: `src/shared/components/common/DataTable/DOCS.md`
+
+### Diseño Responsive - OBLIGATORIO
+
+**Toda implementación DEBE ser responsive.** Al crear o modificar componentes, usar el mejor criterio para decidir cómo mostrar el contenido en diferentes tamaños de pantalla.
+
+#### Breakpoints de Tailwind
+
+| Breakpoint | Mínimo | Uso típico |
+|------------|--------|------------|
+| `sm` | 640px | Móviles grandes |
+| `md` | 768px | Tablets |
+| `lg` | 1024px | Laptops |
+| `xl` | 1280px | Desktop |
+| `2xl` | 1536px | Monitores grandes |
+
+#### Patrones Responsive Comunes
+
+```typescript
+// 1. Ocultar/mostrar elementos según breakpoint
+<div className="hidden md:block">Solo visible en desktop</div>
+<div className="md:hidden">Solo visible en mobile</div>
+
+// 2. Layouts diferentes por breakpoint
+<div className="flex flex-col md:flex-row">...</div>
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3">...</div>
+
+// 3. Envolver componentes que no respetan hidden/flex
+// ❌ INCORRECTO - El componente interno puede sobreescribir el display
+<ResizablePanelGroup className="hidden md:flex">
+
+// ✅ CORRECTO - Envolver en div contenedor
+<div className="hidden md:flex flex-1">
+  <ResizablePanelGroup>...</ResizablePanelGroup>
+</div>
+```
+
+#### Estrategias por Tipo de Contenido
+
+| Contenido | Desktop | Mobile |
+|-----------|---------|--------|
+| **Tablas de datos** | DataTable completa | Ocultar columnas secundarias o usar cards |
+| **Paneles lado a lado** | ResizablePanelGroup | Mostrar uno, botón para ver el otro |
+| **PDFs/Documentos** | Iframe embebido | Botón "Abrir" (visor nativo del dispositivo) |
+| **Formularios largos** | Multi-columna | Single column |
+| **Modales/Dialogs** | Dialog centrado | Sheet desde bottom (más natural en touch) |
+| **Navegación** | Sidebar visible | Sidebar colapsable/Sheet |
+
+#### Uso del MCP de shadcn
+
+**SIEMPRE usar el MCP de shadcn** para buscar componentes y ejemplos antes de implementar:
+
+```
+1. Buscar componentes: mcp__shadcn__search_items_in_registries
+2. Ver ejemplos de uso: mcp__shadcn__get_item_examples_from_registries
+3. Ver detalles del componente: mcp__shadcn__view_items_in_registries
+```
+
+Componentes shadcn útiles para responsive:
+- `Sheet` - Para paneles laterales/inferiores en mobile
+- `Drawer` - Alternativa a Dialog en mobile
+- `Collapsible` - Colapsar contenido secundario
+- `ScrollArea` - Scroll controlado en contenedores
+- `AspectRatio` - Mantener proporciones en imágenes/videos
+
+#### Ejemplo: Detalle de Documento
+
+```typescript
+// Desktop: Paneles redimensionables lado a lado
+// Mobile: Info con botón para abrir documento en nueva pestaña
+
+export function DocumentDetail() {
+  return (
+    <div className="flex h-full flex-col">
+      {/* Mobile Layout */}
+      <div className="flex-1 md:hidden">
+        <ScrollArea className="h-full">
+          <MobileDocumentCard />  {/* Botón "Abrir" que usa visor nativo */}
+          <DocumentInfo />
+        </ScrollArea>
+      </div>
+
+      {/* Desktop Layout */}
+      <div className="hidden md:flex flex-1">
+        <ResizablePanelGroup orientation="horizontal">
+          <ResizablePanel><DocumentPreview /></ResizablePanel>
+          <ResizableHandle />
+          <ResizablePanel><DocumentInfo /></ResizablePanel>
+        </ResizablePanelGroup>
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+## 13. FORMULARIOS
+
+### Stack
+
+- **React Hook Form**: Gestión del formulario
+- **Zod**: Validación de esquemas
+- **@hookform/resolvers**: Integración
+
+### Template
+
+```typescript
+// modules/employees/features/create/components/_EmployeeForm.tsx
+'use client';
+
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { useMutation } from '@tanstack/react-query';
+import { createEmployee } from '../../../actions.server';
+
+const schema = z.object({
+  name: z.string().min(2, 'Nombre requerido'),
+  email: z.string().email('Email inválido'),
+});
+
+type FormData = z.infer<typeof schema>;
+
+export function _EmployeeForm() {
+  const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
+    resolver: zodResolver(schema),
+  });
+
+  const mutation = useMutation({
+    mutationFn: createEmployee,
+  });
+
+  const onSubmit = (data: FormData) => mutation.mutate(data);
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)}>
+      {/* ... */}
+    </form>
+  );
+}
+```
+
+---
+
+## 14. BASE DE DATOS CON PRISMA
+
+### Ubicación
+
+```
+prisma/schema.prisma           # Schema
+src/shared/lib/prisma.ts       # Cliente
+src/generated/prisma/          # Generado
+```
+
+### Configuración (Prisma 7)
+
+```typescript
+// src/shared/lib/prisma.ts
+import { PrismaClient } from '@/generated/prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+export const prisma = new PrismaClient({ adapter });
+```
+
+### Comandos
+
+```bash
+npm run db:generate    # Generar cliente
+npm run db:push        # Push schema (dev)
+npm run db:migrate     # Crear migración
+npm run db:studio      # Abrir Studio
+```
+
+---
+
+## 15. NOMENCLATURAS Y CONVENCIONES
+
+### Archivos
+
+| Tipo | Nomenclatura | Ejemplo |
+|------|--------------|---------|
+| Server Component | PascalCase.tsx | `EmployeesList.tsx` |
+| Client Component | _PascalCase.tsx | `_EmployeesTable.tsx` |
+| Server Actions | actions.server.ts | `actions.server.ts` |
+| Types | types.ts | `types.ts` |
+| Hooks | use{Name}.ts | `useEmployees.ts` |
+| Barrel export | index.ts | `index.ts` |
+
+### Carpetas
+
+| Tipo | Nomenclatura |
+|------|--------------|
+| Módulos | kebab-case | `employees`, `job-positions` |
+| Features | kebab-case | `list`, `detail`, `create` |
+| Componentes dentro de feature | PascalCase |
+
+### Imports con Path Alias
+
+```typescript
+// ✅ CORRECTO
+import { Button } from '@/shared/components/ui/button';
+import { prisma } from '@/shared/lib/prisma';
+import { EmployeesList } from '@/modules/employees';
+
+// ❌ INCORRECTO - Imports relativos profundos
+import { Button } from '../../../shared/components/ui/button';
+```
+
+---
+
+## 16. LOGGER Y DEBUGGING
+
+### Uso
+
+```typescript
+import { logger, Logger } from '@/shared/lib/logger';
+
+// Global
+logger.info('Mensaje');
+logger.error('Error', { data: { error } });
+
+// Con scope
+const log = new Logger('EmployeeForm');
+log.info('Form submitted');
+```
+
+### Control
+
+```env
+NEXT_PUBLIC_SHOW_LOGS="true"   # Dev
+NEXT_PUBLIC_SHOW_LOGS="false"  # Prod
+```
+
+---
+
+## 17. COMANDOS DISPONIBLES
+
+```bash
+# Desarrollo
+npm run dev              # Servidor con Turbopack
+npm run build            # Build producción
+npm run start            # Servidor producción
+
+# Calidad
+npm run lint             # ESLint
+npm run lint:fix         # Corregir ESLint
+npm run format           # Prettier
+npm run check-types      # TypeScript
+
+# Base de Datos
+npm run db:generate      # Generar Prisma
+npm run db:push          # Push schema
+npm run db:migrate       # Crear migración
+npm run db:studio        # Prisma Studio
+
+# Testing
+npm run cy:open          # Cypress UI
+npm run cy:run           # Cypress headless
+```
+
+---
+
+## 18. CHECKLISTS
+
+### Checklist para Nuevo Módulo
+
+- [ ] Crear carpeta en `src/modules/{module-name}/`
+- [ ] Crear `actions.server.ts` con Server Actions
+- [ ] Crear `types.ts` con tipos inferidos
+- [ ] Crear `index.ts` con barrel exports
+- [ ] Crear carpeta `features/` con al menos `list/`
+- [ ] Crear rutas en `app/(core)/{module-name}/`
+
+### Checklist para Nueva Feature
+
+- [ ] Crear carpeta en `modules/{module}/features/{feature-name}/`
+- [ ] Crear Server Component principal (`{Feature}.tsx`)
+- [ ] Crear `components/` con Client Components (prefijo `_`)
+- [ ] Crear `index.ts` con exports
+- [ ] Agregar ruta en `app/(core)/`
+
+### Checklist para Nuevo Componente Cliente
+
+- [ ] Archivo inicia con `_` (ej: `_MyComponent.tsx`)
+- [ ] Primera línea: `'use client';`
+- [ ] Usar `useQuery` para fetching (NO useEffect)
+- [ ] Recibir `initialData` del Server Component padre
+
+### Checklist para Columnas de DataTable
+
+- [ ] Cada columna tiene `meta: { title: 'Título' }` para el dropdown "Mostrar columnas"
+- [ ] El título en `meta.title` coincide con el `title` de `DataTableColumnHeader`
+- [ ] Columnas de selección tienen `enableHiding: false`
+- [ ] Columnas de acciones NO necesitan `meta.title` (no tienen `accessorFn`)
+
+### Checklist antes de Commit
+
+- [ ] `npm run check-types` pasa
+- [ ] `npm run lint` pasa
+- [ ] `npm run format` aplicado
+- [ ] No hay `console.*` (solo `logger`)
+- [ ] No hay `:any` en tipos
+- [ ] Server Components por defecto
+- [ ] Client Components tienen `_` en nombre
+- [ ] Módulos no importan de otros módulos
+- [ ] **Enums usan tipos de Prisma** (`@/generated/prisma/enums`)
+- [ ] **No hay mapeos inline** (usar `shared/utils/mappers.ts`)
+- [ ] **No hay helpers inline** (usar `shared/utils/formatters.ts`)
+- [ ] **Componentes < 200 líneas** (dividir si son más grandes)
+- [ ] **Features tienen su carpeta** (no archivos sueltos en módulo)
+- [ ] **Queries usan `select`** para traer solo campos necesarios
+- [ ] **Server actions usan `getActiveCompanyId()`** (no `getActiveCompany()`)
+- [ ] **No hay tipos de retorno explícitos** en funciones (inferir con `Awaited<ReturnType<>>`)
+- [ ] **Columnas de DataTable tienen `meta.title`** para el dropdown de visibilidad
+- [ ] **Diseño responsive implementado** (mobile y desktop considerados)
+- [ ] **Usado MCP de shadcn** para buscar componentes/ejemplos antes de implementar
+
+---
+
+## 19. TESTING CON CYPRESS
+
+### Estructura
+
+```
+cypress/
+├── e2e/
+│   ├── auth/
+│   │   ├── sign-in.cy.ts
+│   │   └── sign-up.cy.ts
+│   ├── employees/
+│   │   ├── list.cy.ts
+│   │   ├── create.cy.ts
+│   │   └── edit.cy.ts
+│   └── company/
+│       └── unions.cy.ts
+├── fixtures/
+└── support/
+```
+
+### Template de Test
+
+```typescript
+describe('Employees Module', () => {
+  beforeEach(() => {
+    cy.login('admin@test.com', 'password');
+    cy.visit('/employees');
+  });
+
+  it('should list employees', () => {
+    cy.get('[data-testid="employees-table"]').should('exist');
+  });
+
+  it('should create employee', () => {
+    cy.visit('/employees/new');
+    cy.get('[data-testid="name"]').type('John Doe');
+    cy.get('[data-testid="submit"]').click();
+    cy.get('[data-testid="toast-success"]').should('be.visible');
+  });
+});
+```
+
+---
+
+## RESUMEN DE ARQUITECTURA
+
+### Pilares
+
+1. **Módulos con Features**: Dominios de negocio → sub-funcionalidades
+2. **Route Groups**: `(auth)` + `(core)` en App Router
+3. **Server Components First**: Fetching en servidor
+4. **Shared para reutilización**: UI, hooks, actions, lib
+5. **No comunicación directa entre módulos**: Usar shared/
+
+### Estructura Resumida
+
+```
+src/
+├── app/           # Routing (páginas delgadas)
+│   ├── (auth)/    # Login, Register
+│   └── (core)/    # Dashboard, Modules
+├── modules/       # Lógica de negocio
+│   ├── {module}/
+│   │   ├── features/
+│   │   ├── actions.server.ts
+│   │   └── types.ts
+├── shared/        # Código compartido
+│   ├── components/
+│   │   ├── ui/
+│   │   └── layout/
+│   ├── hooks/
+│   ├── actions/
+│   └── lib/
+└── providers/     # React Context
+```
+
+---
+
+## 20. STORAGE (MinIO/R2)
+
+### Arquitectura
+
+El sistema de storage es **unificado** y usa la API S3 para ambos entornos:
+
+| Entorno | Servicio | Endpoint |
+|---------|----------|----------|
+| Desarrollo | MinIO (Docker) | `http://localhost:9000` |
+| Producción | Cloudflare R2 | `https://<account>.r2.cloudflarestorage.com` |
+
+**Mismo código para ambos** - Solo cambian las variables de entorno.
+
+### Configuración
+
+```env
+# Proveedor: "s3" (recomendado) o "local" (legacy)
+STORAGE_PROVIDER="s3"
+
+# Credenciales S3 (MinIO o R2)
+S3_ENDPOINT="http://localhost:9000"
+S3_ACCESS_KEY="minioadmin"
+S3_SECRET_KEY="minioadmin123"
+S3_BUCKET="documents"
+S3_REGION="us-east-1"
+S3_FORCE_PATH_STYLE="true"  # true para MinIO, false para R2
+```
+
+### Comandos Docker
+
+```bash
+# Solo PostgreSQL (sin storage S3)
+docker-compose up -d db
+
+# PostgreSQL + MinIO (con storage S3)
+docker-compose --profile storage up -d
+
+# Ver logs de MinIO
+docker-compose logs -f minio
+
+# Parar todo
+docker-compose --profile storage down
+```
+
+### Console de MinIO
+
+Cuando MinIO está corriendo, acceder a la consola web:
+- URL: `http://localhost:9001`
+- Usuario: `minioadmin`
+- Password: `minioadmin123`
+
+### Uso en Código
+
+```typescript
+// shared/lib/storage.ts
+import {
+  uploadFile,
+  deleteFile,
+  getPresignedDownloadUrl,
+  getPresignedUploadUrl,
+  validateFile,
+  generateUniqueFilename,
+} from '@/shared/lib/storage';
+
+// Subir archivo
+const result = await uploadFile(buffer, 'documento.pdf', {
+  folder: 'empresa/empleados/juan-perez/dni',
+});
+// result = { key: '...', url: '...', filename: '...' }
+
+// Obtener URL de descarga (presigned, expira en 1h)
+const downloadUrl = await getPresignedDownloadUrl(key);
+
+// Obtener URL de upload (para subida directa desde cliente)
+const uploadUrl = await getPresignedUploadUrl(key, 'application/pdf');
+
+// Eliminar archivo
+await deleteFile(key);
+
+// Validar archivo antes de subir
+const validation = validateFile({
+  size: file.size,
+  type: file.type,
+  name: file.name,
+});
+if (!validation.valid) {
+  throw new Error(validation.error);
+}
+```
+
+### Paths de Documentos
+
+```typescript
+import {
+  generateEmployeeDocumentPath,
+  generateEquipmentDocumentPath,
+  generateCompanyDocumentPath,
+  generateEmployeeSlug,
+} from '@/shared/lib/storage';
+
+// Genera: empresa-demo/empleados/juan-perez-12345678/dni/2024-01-15-dni.pdf
+const path = generateEmployeeDocumentPath(
+  'empresa-demo',           // companySlug
+  'juan-perez-12345678',    // employeeSlug
+  'dni',                    // documentTypeSlug
+  '2024-01-15-dni.pdf'      // filename
+);
+
+// Helper para slug de empleado
+const slug = generateEmployeeSlug('Juan', 'Pérez', '12345678');
+// → "juan-perez-12345678"
+```
+
+### Archivos de Configuración
+
+```
+src/shared/
+├── config/
+│   └── storage.config.ts   # Configuración centralizada
+├── lib/
+│   └── storage.ts          # API de storage
+└── ...
+```
+
+### Límites por Defecto
+
+| Límite | Valor |
+|--------|-------|
+| Tamaño máximo | 10 MB |
+| Tipos permitidos | jpg, jpeg, png, webp, gif, pdf, doc, docx, xls, xlsx |
+| Expiración presigned URL | 1 hora (3600s) |
+
+### Producción con Cloudflare R2
+
+```env
+# .env.production
+STORAGE_PROVIDER="s3"
+S3_ENDPOINT="https://<account-id>.r2.cloudflarestorage.com"
+S3_ACCESS_KEY="<r2-access-key>"
+S3_SECRET_KEY="<r2-secret-key>"
+S3_BUCKET="documents"
+S3_REGION="auto"
+S3_FORCE_PATH_STYLE="false"
+S3_PUBLIC_URL="https://files.tudominio.com"  # Opcional, para URLs públicas
+```
+
+---
+
+**Este archivo es la fuente de verdad del proyecto. Seguir estas reglas garantiza código consistente, mantenible y de alta calidad.**

@@ -1,0 +1,159 @@
+import { AlertCircle, ArrowLeft, CheckCircle2, Edit, UserX } from 'lucide-react';
+import Link from 'next/link';
+
+import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/avatar';
+import { Badge } from '@/shared/components/ui/badge';
+import { Button } from '@/shared/components/ui/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/shared/components/ui/tooltip';
+
+import { getInitials } from '@/shared/utils/formatters';
+import { employeeStatusBadges, getBadgeConfig } from '@/shared/utils/mappers';
+import type { EmployeeStatusInfo } from '@/shared/lib/employeeStatus.types';
+import type { Employee } from '../actions.server';
+
+interface Props {
+  employee: Employee;
+  statusInfo: EmployeeStatusInfo;
+}
+
+export function _EmployeeHeader({ employee, statusInfo }: Props) {
+  const initials = getInitials(employee.firstName, employee.lastName);
+  const statusBadge = getBadgeConfig(employee.status, employeeStatusBadges);
+
+  // Build tooltip content based on status
+  const renderTooltipContent = () => {
+    const { missingDocuments, expiredDocuments, completedDocuments } = statusInfo;
+
+    if (missingDocuments.length === 0 && expiredDocuments.length === 0) {
+      return (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-green-600">
+            <CheckCircle2 className="h-4 w-4" />
+            <span className="font-medium">Documentación completa</span>
+          </div>
+          {completedDocuments.length > 0 && (
+            <ul className="ml-6 text-sm text-muted-foreground">
+              {completedDocuments.map((doc) => (
+                <li key={doc.id}>• {doc.name}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {missingDocuments.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="h-4 w-4" />
+              <span className="font-medium">Documentos faltantes ({missingDocuments.length})</span>
+            </div>
+            <ul className="ml-6 mt-1 text-sm">
+              {missingDocuments.map((doc) => (
+                <li key={doc.id}>• {doc.name}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {expiredDocuments.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 text-orange-600">
+              <AlertCircle className="h-4 w-4" />
+              <span className="font-medium">Documentos vencidos ({expiredDocuments.length})</span>
+            </div>
+            <ul className="ml-6 mt-1 text-sm">
+              {expiredDocuments.map((doc) => (
+                <li key={doc.id}>• {doc.name}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {completedDocuments.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 text-green-600">
+              <CheckCircle2 className="h-4 w-4" />
+              <span className="font-medium">Documentos completos ({completedDocuments.length})</span>
+            </div>
+            <ul className="ml-6 mt-1 text-sm text-muted-foreground">
+              {completedDocuments.map((doc) => (
+                <li key={doc.id}>• {doc.name}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Row 1: Back button + Avatar + Info */}
+      <div className="flex items-start gap-3 sm:gap-4">
+        <Button variant="outline" size="icon" className="shrink-0" asChild>
+          <Link href="/dashboard/employees">
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+        </Button>
+        <Avatar className="h-12 w-12 shrink-0 sm:h-16 sm:w-16">
+          <AvatarImage
+            src={employee.pictureUrl || undefined}
+            alt={`${employee.firstName} ${employee.lastName}`}
+          />
+          <AvatarFallback className="text-base sm:text-lg">{initials}</AvatarFallback>
+        </Avatar>
+        <div className="min-w-0 flex-1">
+          {/* Name and badges - stack on mobile */}
+          <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
+            <h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl">
+              {employee.lastName}, {employee.firstName}
+            </h1>
+            <div className="flex flex-wrap gap-1">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant={statusBadge.variant} className="cursor-help">
+                      {statusBadge.label}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-xs">
+                    {renderTooltipContent()}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              {!employee.isActive && <Badge variant="destructive">Inactivo</Badge>}
+            </div>
+          </div>
+          {/* Employee details - stack on mobile */}
+          <div className="mt-1 flex flex-col gap-0.5 text-sm text-muted-foreground sm:flex-row sm:gap-1">
+            <span>Legajo: {employee.employeeNumber}</span>
+            <span className="hidden sm:inline">•</span>
+            <span>CUIL: {employee.cuil}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Row 2: Action buttons */}
+      <div className="flex gap-2 sm:justify-end">
+        <Button variant="outline" className="flex-1 sm:flex-none" asChild>
+          <Link href={`/dashboard/employees/${employee.id}/edit`}>
+            <Edit className="mr-2 h-4 w-4" />
+            Editar
+          </Link>
+        </Button>
+        {employee.isActive && (
+          <Button variant="destructive" className="flex-1 sm:flex-none">
+            <UserX className="mr-2 h-4 w-4" />
+            <span className="hidden xs:inline">Dar de </span>Baja
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}

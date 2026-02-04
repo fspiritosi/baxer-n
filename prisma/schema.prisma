@@ -1,0 +1,1347 @@
+// Prisma Schema para el proyecto
+// Documentación: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================
+// GEOGRAFÍA - Países, Provincias y Ciudades
+// ============================================
+
+model Country {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  code      String   @unique // ISO 3166-1 alpha-2 (AR, BR, CL, etc.)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  employees Employee[]
+
+  @@map("countries")
+}
+
+model Province {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  cities    City[]
+  companies Company[]
+  employees Employee[]
+
+  @@map("provinces")
+}
+
+model City {
+  id        Int      @id @default(autoincrement())
+  name      String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  provinceId Int       @map("province_id")
+  province   Province  @relation(fields: [provinceId], references: [id], onDelete: Cascade)
+  companies  Company[]
+  employees          Employee[]
+  employeesBornHere  Employee[] @relation("EmployeeBirthPlace")
+
+  @@unique([name, provinceId])
+  @@map("cities")
+}
+
+// ============================================
+// EMPRESAS Y MIEMBROS
+// ============================================
+
+model Company {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String
+  slug         String?  @unique
+  taxId        String?  @unique @map("tax_id") // CUIT/RUT/etc
+  description  String?
+  website      String?
+  email        String?
+  phone        String?
+  address      String?
+  country      String?
+  industry     String?
+  logoUrl         String?  @map("logo_url")
+  isActive        Boolean  @default(true) @map("is_active")
+  isSingleCompany Boolean  @default(false) @map("is_single_company") // Modo empresa única - sin selector de empresas
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relaciones geográficas
+  provinceId Int?      @map("province_id")
+  province   Province? @relation(fields: [provinceId], references: [id])
+  cityId     Int?      @map("city_id")
+  city       City?     @relation(fields: [cityId], references: [id])
+
+  // Relaciones
+  members     CompanyMember[]
+  invitations CompanyInvitation[]
+  roles       CompanyRole[]
+
+  // Relaciones con catálogos laborales
+  contractTypes ContractType[]
+  jobPositions  JobPosition[]
+  unions        Union[]
+  costCenters   CostCenter[]
+  employees     Employee[]
+
+  // Relaciones con catálogos de vehículos
+  vehicleBrands   VehicleBrand[]
+  vehicleTypes    VehicleType[]
+  typesOfVehicles TypeOfVehicle[]
+  sectors         Sector[]
+  typeOperatives  TypeOperative[]
+  contractors     Contractor[]
+  equipmentOwners EquipmentOwner[]
+  vehicles        Vehicle[]
+
+  // Documentos
+  documentTypes    DocumentType[]
+  companyDocuments CompanyDocument[]
+
+  // Módulo Comercial
+  leads    Lead[]
+  contacts Contact[]
+  quotes   Quote[]
+
+  @@map("companies")
+}
+
+model CompanyMember {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id") // Clerk user ID
+  isOwner   Boolean   @default(false) @map("is_owner")
+  isActive  Boolean   @default(true) @map("is_active")
+  invitedBy String?   @map("invited_by") // Clerk user ID de quien invitó
+  joinedAt  DateTime? @map("joined_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  // Relaciones
+  companyId String  @map("company_id") @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  // Rol del miembro
+  roleId String?      @map("role_id") @db.Uuid
+  role   CompanyRole? @relation(fields: [roleId], references: [id])
+
+  // Vinculación opcional con empleado
+  employeeId String?   @unique @map("employee_id") @db.Uuid
+  employee   Employee? @relation(fields: [employeeId], references: [id])
+
+  // Permisos individuales (override)
+  permissions CompanyMemberPermission[]
+
+  @@unique([companyId, userId])
+  @@map("company_members")
+}
+
+model CompanyInvitation {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email      String
+  role       String    @default("member") // Temporal hasta implementar roles
+  token      String    @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invitedBy  String    @map("invited_by") // Clerk user ID
+  expiresAt  DateTime  @map("expires_at")
+  acceptedAt DateTime? @map("accepted_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  // Relaciones
+  companyId String  @map("company_id") @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  // Rol asignado al aceptar (se agregará en Fase 3)
+  roleId String?      @map("role_id") @db.Uuid
+  assignedRole   CompanyRole? @relation(fields: [roleId], references: [id])
+
+  // Empleado a vincular cuando se acepte la invitación
+  employeeId String?   @map("employee_id") @db.Uuid
+  employee   Employee? @relation(fields: [employeeId], references: [id])
+
+  @@unique([companyId, email])
+  @@map("company_invitations")
+}
+
+// ============================================
+// PREFERENCIAS DE USUARIO
+// ============================================
+
+model UserPreference {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String   @unique @map("user_id") // Clerk user ID
+  activeCompanyId String?  @map("active_company_id") @db.Uuid
+  theme           String   @default("system")
+  locale          String   @default("es")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("user_preferences")
+}
+
+// ============================================
+// SISTEMA DE ROLES Y PERMISOS POR EMPRESA
+// ============================================
+
+// Rutas del sistema (definición global) - Ya no se usa para permisos, solo como catálogo de navegación
+model Route {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  module      String   // "employees", "equipment", "company"
+  path        String   @unique // "/dashboard/employees"
+  name        String   // "Lista de Empleados"
+  description String?
+  parentPath  String?  @map("parent_path") // Para subrutas
+  orderIndex  Int      @default(0) @map("order_index")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("routes")
+}
+
+// Acciones disponibles (CRUD)
+model Action {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @unique // "Ver", "Crear", "Editar", "Eliminar"
+  slug        String   @unique // "view", "create", "update", "delete"
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relaciones
+  rolePermissions   CompanyRolePermission[]
+  memberPermissions CompanyMemberPermission[]
+
+  @@map("actions")
+}
+
+// Roles por empresa
+model CompanyRole {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   // "Administrador", "Usuario"
+  slug        String?
+  description String?
+  color       String?  // Para UI
+  isDefault   Boolean  @default(false) @map("is_default") // Rol para nuevos miembros
+  isSystem    Boolean  @default(false) @map("is_system") // owner/admin, no eliminables
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  companyId String  @map("company_id") @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  permissions CompanyRolePermission[]
+  members     CompanyMember[]
+  invitations CompanyInvitation[]
+
+  @@unique([companyId, slug])
+  @@map("company_roles")
+}
+
+// Permisos de cada rol por módulo
+model CompanyRolePermission {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  module    String   // "employees", "company.cost-centers", "commercial.clients", etc.
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relaciones
+  roleId   String      @map("role_id") @db.Uuid
+  role     CompanyRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  actionId String      @map("action_id") @db.Uuid
+  action   Action      @relation(fields: [actionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, module, actionId])
+  @@map("company_role_permissions")
+}
+
+// Override de permisos individuales por miembro
+model CompanyMemberPermission {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  module     String   // "employees", "company.cost-centers", etc.
+  isGranted  Boolean  @default(true) @map("is_granted") // true=concede, false=revoca
+  assignedBy String?  @map("assigned_by") // Clerk user ID
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relaciones
+  memberId String        @map("member_id") @db.Uuid
+  member   CompanyMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  actionId String        @map("action_id") @db.Uuid
+  action   Action        @relation(fields: [actionId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, module, actionId])
+  @@map("company_member_permissions")
+}
+
+// Auditoría de cambios en permisos
+model PermissionAuditLog {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId   String   @map("company_id") @db.Uuid
+  performedBy String   @map("performed_by") // Clerk user ID
+  action      String   // "role_created", "role_updated", "permission_granted", "permission_revoked", etc.
+  targetType  String   @map("target_type") // "role", "member", "invitation"
+  targetId    String   @map("target_id") @db.Uuid
+  targetName  String?  @map("target_name")
+  module      String?
+  details     Json?    @db.JsonB
+  oldValue    Json?    @map("old_value") @db.JsonB
+  newValue    Json?    @map("new_value") @db.JsonB
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([companyId, createdAt(sort: Desc)])
+  @@map("permission_audit_logs")
+}
+
+// ============================================
+// CATÁLOGOS LABORALES (por empresa)
+// ============================================
+
+// Tipos de Contrato
+model ContractType {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   // "Tiempo Indeterminado", "Período de prueba"
+  code        String?  // "008", "014", "022"
+  description String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  companyId String  @map("company_id") @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  employees              Employee[]
+  documentTypeConditions DocumentTypeContractType[]
+
+  @@unique([companyId, name])
+  @@map("contract_types")
+}
+
+// Puestos de Trabajo
+model JobPosition {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   // "Supervisor", "Chofer de 1°", "ATG"
+  description String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  companyId String  @map("company_id") @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  employees               Employee[]
+  documentTypeConditions  DocumentTypeJobPosition[]
+
+  @@unique([companyId, name])
+  @@map("job_positions")
+}
+
+// Gremios/Sindicatos
+model Union {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   // "Sindicato de Camioneros NQN"
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  companyId String  @map("company_id") @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  collectiveAgreements   CollectiveAgreement[]
+  documentTypeConditions DocumentTypeUnion[]
+
+  @@unique([companyId, name])
+  @@map("unions")
+}
+
+// Convenios Colectivos
+model CollectiveAgreement {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   // "40/89", "644/12"
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  unionId String @map("union_id") @db.Uuid
+  union   Union  @relation(fields: [unionId], references: [id], onDelete: Cascade)
+
+  jobCategories          JobCategory[]
+  documentTypeConditions DocumentTypeCollectiveAgreement[]
+
+  @@unique([unionId, name])
+  @@map("collective_agreements")
+}
+
+// Categorías Laborales
+model JobCategory {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   // "Chofer 1° Cat", "Administrativo 1°"
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  agreementId String              @map("agreement_id") @db.Uuid
+  agreement   CollectiveAgreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+
+  employees              Employee[]
+  documentTypeConditions DocumentTypeJobCategory[]
+
+  @@unique([agreementId, name])
+  @@map("job_categories")
+}
+
+// Centros de Costo
+model CostCenter {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   // "Logística", "Mantenimiento", "Administración"
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  companyId String  @map("company_id") @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  employees Employee[]
+  vehicles  Vehicle[]
+
+  @@unique([companyId, name])
+  @@map("cost_centers")
+}
+
+// ============================================
+// CATÁLOGOS DE VEHÍCULOS/EQUIPOS (por empresa)
+// ============================================
+
+// Marcas de Vehículos
+model VehicleBrand {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   // "Scania", "Volvo", "Mercedes-Benz"
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  companyId String  @map("company_id") @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  models                 VehicleModel[]
+  vehicles               Vehicle[]
+  documentTypeConditions DocumentTypeVehicleBrand[]
+
+  @@unique([companyId, name])
+  @@map("vehicle_brands")
+}
+
+// Modelos de Vehículos (por marca)
+model VehicleModel {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   // "R450", "FH 540", "Actros"
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  brandId String       @map("brand_id") @db.Uuid
+  brand   VehicleBrand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  vehicles Vehicle[]
+
+  @@unique([brandId, name])
+  @@map("vehicle_models")
+}
+
+// Tipos de Equipo (Camión, Semirremolque, Acoplado, etc.)
+model VehicleType {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String   // "Camión", "Semirremolque", "Acoplado"
+  hasHitch     Boolean  @default(false) @map("has_hitch") // Tiene enganche
+  isTractorUnit Boolean @default(false) @map("is_tractor_unit") // Es unidad tractora
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  companyId String  @map("company_id") @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  vehicles               Vehicle[]
+  documentTypeConditions DocumentTypeVehicleType[]
+
+  @@unique([companyId, name])
+  @@map("vehicle_types")
+}
+
+// Clasificación de Vehículo (Vehículo vs Otros equipos)
+model TypeOfVehicle {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   // "Vehículos", "Otros"
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  companyId String  @map("company_id") @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  vehicles Vehicle[]
+
+  @@unique([companyId, name])
+  @@map("types_of_vehicles")
+}
+
+// Sectores de Operación
+model Sector {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String   // "Norte", "Sur", "Centro"
+  shortDescription String?  @map("short_description")
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  companyId String  @map("company_id") @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  vehicles Vehicle[]
+
+  @@unique([companyId, name])
+  @@map("sectors")
+}
+
+// Tipos Operativos
+model TypeOperative {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   // "Larga distancia", "Distribución", "Urbano"
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  companyId String  @map("company_id") @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  vehicles Vehicle[]
+
+  @@unique([companyId, name])
+  @@map("type_operatives")
+}
+
+// Titulares de Equipos (dueños/locadores)
+model EquipmentOwner {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   // Razón social
+  cuit      String   // CUIT del titular
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  companyId String  @map("company_id") @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  // Tipos de titularidad que ofrece este titular
+  titularityTypes EquipmentOwnerTitularityType[]
+
+  // Vehículos de este titular
+  vehicles Vehicle[]
+
+  @@unique([companyId, cuit])
+  @@map("equipment_owners")
+}
+
+// Tipos de titularidad que ofrece cada titular (un owner puede ofrecer Leasing, Alquiler, etc.)
+model EquipmentOwnerTitularityType {
+  id             String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  titularityType VehicleTitularityType @map("titularity_type")
+  createdAt      DateTime              @default(now()) @map("created_at")
+
+  // Relaciones
+  ownerId String         @map("owner_id") @db.Uuid
+  owner   EquipmentOwner @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, titularityType])
+  @@map("equipment_owner_titularity_types")
+}
+
+// Contratistas/Clientes (a los que se asignan vehículos y empleados)
+model Contractor {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                 String    // "YPF S.A.", "Petrolera Aconcagua"
+  taxId                String?   @map("tax_id") // CUIT
+  email                String?
+  phone                String?
+  address              String?
+  logoKey              String?   @map("logo_key") // Key en S3/MinIO para el logo
+  isActive             Boolean   @default(true) @map("is_active")
+  terminationDate      DateTime? @map("termination_date")
+  reasonForTermination String?   @map("reason_for_termination")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  // Relaciones
+  companyId String  @map("company_id") @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  vehicleAllocations  ContractorVehicle[]
+  employeeAllocations ContractorEmployee[]
+  convertedFromLeads  Lead[]
+  contact             Contact?
+  quotes              Quote[]
+
+  @@unique([companyId, name])
+  @@unique([companyId, taxId])
+  @@map("contractors")
+}
+
+// Tabla intermedia: Asignación de vehículos a contratistas
+model ContractorVehicle {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relaciones
+  vehicleId    String     @map("vehicle_id") @db.Uuid
+  vehicle      Vehicle    @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  contractorId String     @map("contractor_id") @db.Uuid
+  contractor   Contractor @relation(fields: [contractorId], references: [id], onDelete: Cascade)
+
+  @@unique([vehicleId, contractorId])
+  @@map("contractor_vehicles")
+}
+
+// Tabla intermedia: Asignación de empleados a contratistas/clientes
+model ContractorEmployee {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relaciones
+  employeeId   String     @map("employee_id") @db.Uuid
+  employee     Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  contractorId String     @map("contractor_id") @db.Uuid
+  contractor   Contractor @relation(fields: [contractorId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, contractorId])
+  @@map("contractor_employees")
+}
+
+// ============================================
+// MÓDULO COMERCIAL - Leads, Contactos, Presupuestos
+// ============================================
+
+// Estado del Lead
+enum LeadStatus {
+  NEW         // Nuevo
+  CONTACTED   // Contactado
+  NEGOTIATING // En negociación
+  CONVERTED   // Convertido a cliente
+  REJECTED    // Rechazado
+  INACTIVE    // Inactivo
+
+  @@map("lead_status")
+}
+
+// Lead (prospecto que puede convertirse en cliente/contratista)
+model Lead {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  taxId       String?    @map("tax_id")
+  email       String?
+  phone       String?
+  address     String?
+  status      LeadStatus @default(NEW)
+  notes       String?
+  convertedAt DateTime?  @map("converted_at")
+  isActive    Boolean    @default(true) @map("is_active")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  // Relaciones
+  companyId           String      @map("company_id") @db.Uuid
+  company             Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  convertedToClientId String?     @map("converted_to_client_id") @db.Uuid
+  convertedToClient   Contractor? @relation(fields: [convertedToClientId], references: [id])
+
+  // Contacto principal del lead
+  contact Contact?
+
+  @@unique([companyId, taxId])
+  @@map("leads")
+}
+
+// Contacto (persona de contacto de un cliente o lead)
+model Contact {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  firstName String   @map("first_name")
+  lastName  String   @map("last_name")
+  email     String?
+  phone     String?
+  position  String?  // Cargo en la empresa
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  companyId String  @map("company_id") @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  // Un contacto pertenece a un cliente O a un lead (no ambos)
+  contractorId String?     @unique @map("contractor_id") @db.Uuid
+  contractor   Contractor? @relation(fields: [contractorId], references: [id])
+  leadId       String?     @unique @map("lead_id") @db.Uuid
+  lead         Lead?       @relation(fields: [leadId], references: [id])
+
+  @@map("contacts")
+}
+
+// Estado del Presupuesto
+enum QuoteStatus {
+  DRAFT    // Borrador
+  SENT     // Enviado
+  ACCEPTED // Aceptado
+  REJECTED // Rechazado
+  EXPIRED  // Expirado
+
+  @@map("quote_status")
+}
+
+// Presupuesto (mockup para futuro desarrollo)
+model Quote {
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  number         String      // Número de presupuesto
+  issueDate      DateTime    @map("issue_date")
+  expirationDate DateTime?   @map("expiration_date")
+  status         QuoteStatus @default(DRAFT)
+  items          Json        @db.JsonB // Array de items del presupuesto
+  subtotal       Decimal     @db.Decimal(12, 2)
+  tax            Decimal?    @db.Decimal(12, 2)
+  total          Decimal     @db.Decimal(12, 2)
+  currency       Currency    @default(ARS)
+  notes          String?
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  // Relaciones
+  companyId    String      @map("company_id") @db.Uuid
+  company      Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contractorId String?     @map("contractor_id") @db.Uuid
+  contractor   Contractor? @relation(fields: [contractorId], references: [id])
+  leadId       String?     @map("lead_id") @db.Uuid
+
+  @@unique([companyId, number])
+  @@map("quotes")
+}
+
+// ============================================
+// DOCUMENTOS
+// ============================================
+
+// A qué tipo de entidad aplica el documento
+enum DocumentAppliesTo {
+  EMPLOYEE
+  EQUIPMENT
+  COMPANY
+
+  @@map("document_applies_to")
+}
+
+// Estado del documento (simplificado - sin flujo de aprobación)
+enum DocumentState {
+  PENDING  // Sin archivo subido
+  APPROVED // Documento subido y válido
+  EXPIRED  // Vencido
+
+  @@map("document_state")
+}
+
+// Acción realizada sobre un documento (para historial)
+enum DocumentAction {
+  UPLOADED  // Primera subida
+  REPLACED  // Reemplazo (elimina archivo anterior)
+  RENEWED   // Renovación (mantiene anterior en historial)
+  DELETED   // Eliminación manual
+  EXPIRED   // Marcado como vencido por sistema
+
+  @@map("document_action")
+}
+
+// Tipos de Documento (catálogo por empresa)
+model DocumentType {
+  id            String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name          String            // "Licencia de conducir", "DNI", "F931"
+  slug          String            // "licencia-de-conducir" - para paths de storage
+  appliesTo     DocumentAppliesTo @map("applies_to")
+  isMandatory   Boolean           @default(false) @map("is_mandatory")
+  hasExpiration Boolean           @default(false) @map("has_expiration")
+  isMonthly     Boolean           @default(false) @map("is_monthly") // Recibos, F931
+  isPrivate     Boolean           @default(false) @map("is_private")
+  isTermination   Boolean           @default(false) @map("is_termination") // Doc de baja
+  isMultiResource Boolean           @default(false) @map("is_multi_resource") // Cubre a todos los empleados/equipos
+  description     String?
+  isActive      Boolean           @default(true) @map("is_active")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+
+  // Campos de condiciones
+  isConditional      Boolean    @default(false) @map("is_conditional")
+  genders            Gender[]   @default([])
+  costTypes          CostType[] @default([])
+  advancedConditions Json?      @map("advanced_conditions") @db.JsonB
+
+  // Relaciones
+  companyId String  @map("company_id") @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  employeeDocuments  EmployeeDocument[]
+  equipmentDocuments EquipmentDocument[]
+  companyDocuments   CompanyDocument[]
+
+  // Condiciones para EMPLOYEE
+  conditionJobPositions         DocumentTypeJobPosition[]
+  conditionContractTypes        DocumentTypeContractType[]
+  conditionJobCategories        DocumentTypeJobCategory[]
+  conditionUnions               DocumentTypeUnion[]
+  conditionCollectiveAgreements DocumentTypeCollectiveAgreement[]
+
+  // Condiciones para EQUIPMENT
+  conditionVehicleBrands DocumentTypeVehicleBrand[]
+  conditionVehicleTypes  DocumentTypeVehicleType[]
+
+  @@unique([companyId, name])
+  @@unique([companyId, slug])
+  @@map("document_types")
+}
+
+// ============================================
+// CONDICIONES DE TIPOS DE DOCUMENTO
+// ============================================
+
+// Condición: Puestos de Trabajo
+model DocumentTypeJobPosition {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  documentTypeId String       @map("document_type_id") @db.Uuid
+  documentType   DocumentType @relation(fields: [documentTypeId], references: [id], onDelete: Cascade)
+  jobPositionId  String       @map("job_position_id") @db.Uuid
+  jobPosition    JobPosition  @relation(fields: [jobPositionId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@unique([documentTypeId, jobPositionId])
+  @@map("document_type_job_positions")
+}
+
+// Condición: Tipos de Contrato
+model DocumentTypeContractType {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  documentTypeId String       @map("document_type_id") @db.Uuid
+  documentType   DocumentType @relation(fields: [documentTypeId], references: [id], onDelete: Cascade)
+  contractTypeId String       @map("contract_type_id") @db.Uuid
+  contractType   ContractType @relation(fields: [contractTypeId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@unique([documentTypeId, contractTypeId])
+  @@map("document_type_contract_types")
+}
+
+// Condición: Categorías Laborales
+model DocumentTypeJobCategory {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  documentTypeId String       @map("document_type_id") @db.Uuid
+  documentType   DocumentType @relation(fields: [documentTypeId], references: [id], onDelete: Cascade)
+  jobCategoryId  String       @map("job_category_id") @db.Uuid
+  jobCategory    JobCategory  @relation(fields: [jobCategoryId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@unique([documentTypeId, jobCategoryId])
+  @@map("document_type_job_categories")
+}
+
+// Condición: Sindicatos
+model DocumentTypeUnion {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  documentTypeId String       @map("document_type_id") @db.Uuid
+  documentType   DocumentType @relation(fields: [documentTypeId], references: [id], onDelete: Cascade)
+  unionId        String       @map("union_id") @db.Uuid
+  union          Union        @relation(fields: [unionId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@unique([documentTypeId, unionId])
+  @@map("document_type_unions")
+}
+
+// Condición: Convenios Colectivos
+model DocumentTypeCollectiveAgreement {
+  id                    String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  documentTypeId        String              @map("document_type_id") @db.Uuid
+  documentType          DocumentType        @relation(fields: [documentTypeId], references: [id], onDelete: Cascade)
+  collectiveAgreementId String              @map("collective_agreement_id") @db.Uuid
+  collectiveAgreement   CollectiveAgreement @relation(fields: [collectiveAgreementId], references: [id], onDelete: Cascade)
+  createdAt             DateTime            @default(now()) @map("created_at")
+
+  @@unique([documentTypeId, collectiveAgreementId])
+  @@map("document_type_collective_agreements")
+}
+
+// Condición: Marcas de Vehículo
+model DocumentTypeVehicleBrand {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  documentTypeId String       @map("document_type_id") @db.Uuid
+  documentType   DocumentType @relation(fields: [documentTypeId], references: [id], onDelete: Cascade)
+  vehicleBrandId String       @map("vehicle_brand_id") @db.Uuid
+  vehicleBrand   VehicleBrand @relation(fields: [vehicleBrandId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@unique([documentTypeId, vehicleBrandId])
+  @@map("document_type_vehicle_brands")
+}
+
+// Condición: Tipos de Vehículo
+model DocumentTypeVehicleType {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  documentTypeId String       @map("document_type_id") @db.Uuid
+  documentType   DocumentType @relation(fields: [documentTypeId], references: [id], onDelete: Cascade)
+  vehicleTypeId  String       @map("vehicle_type_id") @db.Uuid
+  vehicleType    VehicleType  @relation(fields: [vehicleTypeId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@unique([documentTypeId, vehicleTypeId])
+  @@map("document_type_vehicle_types")
+}
+
+// Documentos de Empleados
+model EmployeeDocument {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  state          DocumentState @default(PENDING)
+  expirationDate DateTime?     @map("expiration_date")
+  period         String?       // Para documentos mensuales: "2024-01"
+  documentPath   String?       @map("document_path") // URL del archivo
+  documentKey    String?       @map("document_key") // Key en storage
+  fileName       String?       @map("file_name") // Nombre original
+  fileSize       Int?          @map("file_size") // Tamaño en bytes
+  mimeType       String?       @map("mime_type")
+  uploadedBy     String?       @map("uploaded_by") // Clerk user ID
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  // Relaciones
+  documentTypeId String       @map("document_type_id") @db.Uuid
+  documentType   DocumentType @relation(fields: [documentTypeId], references: [id], onDelete: Cascade)
+  employeeId     String?      @map("employee_id") @db.Uuid // Nullable para documentos multirrecurso
+  employee       Employee?    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  // Historial de cambios
+  history EmployeeDocumentHistory[]
+
+  @@unique([documentTypeId, employeeId, period])
+  @@map("employee_documents")
+}
+
+// Historial de cambios en documentos de empleados
+model EmployeeDocumentHistory {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  action         DocumentAction // Tipo de acción realizada
+  state          DocumentState  // Estado después de la acción
+  documentKey    String?        @map("document_key") // Key del archivo en ese momento
+  fileName       String?        @map("file_name")
+  fileSize       Int?           @map("file_size")
+  mimeType       String?        @map("mime_type")
+  expirationDate DateTime?      @map("expiration_date")
+  reason         String?        // Razón del cambio (opcional)
+  changedBy      String         @map("changed_by") // Clerk user ID
+  changedAt      DateTime       @default(now()) @map("changed_at")
+
+  // Relación con el documento
+  documentId String           @map("document_id") @db.Uuid
+  document   EmployeeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@index([changedAt(sort: Desc)])
+  @@map("employee_document_history")
+}
+
+// Documentos de Equipos/Vehículos
+model EquipmentDocument {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  state           DocumentState @default(PENDING)
+  expirationDate  DateTime?     @map("expiration_date")
+  period          String?
+  documentPath    String?       @map("document_path")
+  documentKey     String?       @map("document_key")
+  fileName        String?       @map("file_name")
+  fileSize        Int?          @map("file_size")
+  mimeType        String?       @map("mime_type")
+  rejectionReason String?       @map("rejection_reason")
+  uploadedBy      String?       @map("uploaded_by")
+  approvedBy      String?       @map("approved_by")
+  approvedAt      DateTime?     @map("approved_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  // Relaciones
+  documentTypeId String       @map("document_type_id") @db.Uuid
+  documentType   DocumentType @relation(fields: [documentTypeId], references: [id], onDelete: Cascade)
+  vehicleId      String?      @map("vehicle_id") @db.Uuid // Nullable para documentos multirrecurso
+  vehicle        Vehicle?     @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  // Historial de cambios
+  history EquipmentDocumentHistory[]
+
+  @@unique([documentTypeId, vehicleId, period])
+  @@map("equipment_documents")
+}
+
+// Historial de cambios en documentos de equipos/vehículos
+model EquipmentDocumentHistory {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  action         DocumentAction // Tipo de acción realizada
+  state          DocumentState  // Estado después de la acción
+  documentKey    String?        @map("document_key") // Key del archivo en ese momento
+  fileName       String?        @map("file_name")
+  fileSize       Int?           @map("file_size")
+  mimeType       String?        @map("mime_type")
+  expirationDate DateTime?      @map("expiration_date")
+  reason         String?        // Razón del cambio (opcional)
+  changedBy      String         @map("changed_by") // Clerk user ID
+  changedAt      DateTime       @default(now()) @map("changed_at")
+
+  // Relación con el documento
+  documentId String            @map("document_id") @db.Uuid
+  document   EquipmentDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@index([changedAt(sort: Desc)])
+  @@map("equipment_document_history")
+}
+
+// Documentos de Empresa
+model CompanyDocument {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  state           DocumentState @default(PENDING)
+  expirationDate  DateTime?     @map("expiration_date")
+  period          String?
+  documentPath    String?       @map("document_path")
+  documentKey     String?       @map("document_key")
+  fileName        String?       @map("file_name")
+  fileSize        Int?          @map("file_size")
+  mimeType        String?       @map("mime_type")
+  rejectionReason String?       @map("rejection_reason")
+  uploadedBy      String?       @map("uploaded_by")
+  approvedBy      String?       @map("approved_by")
+  approvedAt      DateTime?     @map("approved_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  // Relaciones
+  documentTypeId String       @map("document_type_id") @db.Uuid
+  documentType   DocumentType @relation(fields: [documentTypeId], references: [id], onDelete: Cascade)
+  companyId      String       @map("company_id") @db.Uuid
+  company        Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([documentTypeId, companyId, period])
+  @@map("company_documents")
+}
+
+// ============================================
+// EMPLEADOS
+// ============================================
+
+// Enums para empleados
+enum IdentityDocumentType {
+  DNI
+  LE
+  LC
+  PASSPORT
+
+  @@map("identity_document_type")
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  NOT_DECLARED
+
+  @@map("gender")
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+  SEPARATED
+  DOMESTIC_PARTNERSHIP
+
+  @@map("marital_status")
+}
+
+enum EducationLevel {
+  PRIMARY
+  SECONDARY
+  TERTIARY
+  UNIVERSITY
+  POSTGRADUATE
+
+  @@map("education_level")
+}
+
+enum UnionAffiliationStatus {
+  AFFILIATED
+  NOT_AFFILIATED
+
+  @@map("union_affiliation_status")
+}
+
+enum CostType {
+  DIRECT
+  INDIRECT
+
+  @@map("cost_type")
+}
+
+enum EmployeeStatus {
+  INCOMPLETE
+  COMPLETE
+  COMPLETE_EXPIRED_DOCS
+
+  @@map("employee_status")
+}
+
+enum TerminationReason {
+  DISMISSAL_WITHOUT_CAUSE
+  RESIGNATION
+  DISMISSAL_WITH_CAUSE
+  MUTUAL_AGREEMENT
+  CONTRACT_END
+  DEATH
+
+  @@map("termination_reason")
+}
+
+model Employee {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Identificación
+  employeeNumber       String               @map("employee_number") // Legajo
+  identityDocumentType IdentityDocumentType @default(DNI) @map("identity_document_type")
+  documentNumber       String               @map("document_number")
+  cuil           String       // CUIL/CUIT
+
+  // Datos Personales
+  firstName       String          @map("first_name")
+  lastName        String          @map("last_name")
+  birthDate       DateTime?       @map("birth_date")
+  gender          Gender?
+  maritalStatus   MaritalStatus?  @map("marital_status")
+  educationLevel  EducationLevel? @map("education_level")
+  pictureUrl      String?         @map("picture_url") // URL de la foto
+  pictureKey      String?         @map("picture_key") // Clave en storage (MinIO/R2)
+
+  // Nacionalidad
+  nationalityId Int?     @map("nationality_id")
+  nationality   Country? @relation(fields: [nationalityId], references: [id])
+
+  // Contacto
+  phone String
+  email String?
+
+  // Dirección
+  street       String  @map("street")
+  streetNumber String  @map("street_number")
+  postalCode   String? @map("postal_code")
+  provinceId   Int     @map("province_id")
+  province     Province @relation(fields: [provinceId], references: [id])
+  cityId       Int?    @map("city_id")
+  city         City?   @relation(fields: [cityId], references: [id])
+
+  // Lugar de nacimiento
+  birthPlaceId Int?  @map("birth_place_id")
+  birthPlace   City? @relation("EmployeeBirthPlace", fields: [birthPlaceId], references: [id])
+
+  // Información Laboral
+  hireDate              DateTime                @map("hire_date") // Fecha de ingreso
+  workingHoursPerDay    Int?                    @map("working_hours_per_day")
+  unionAffiliationStatus UnionAffiliationStatus? @map("union_affiliation_status")
+  costType              CostType?               @map("cost_type")
+
+  // Estado
+  status            EmployeeStatus     @default(INCOMPLETE)
+  isActive          Boolean            @default(true) @map("is_active")
+  terminationDate   DateTime?          @map("termination_date")
+  terminationReason TerminationReason? @map("termination_reason")
+
+  // Relaciones con catálogos
+  companyId      String        @map("company_id") @db.Uuid
+  company        Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  jobPositionId  String?       @map("job_position_id") @db.Uuid
+  jobPosition    JobPosition?  @relation(fields: [jobPositionId], references: [id])
+  contractTypeId String?       @map("contract_type_id") @db.Uuid
+  contractType   ContractType? @relation(fields: [contractTypeId], references: [id])
+  jobCategoryId  String?       @map("job_category_id") @db.Uuid
+  jobCategory    JobCategory?  @relation(fields: [jobCategoryId], references: [id])
+  costCenterId   String?       @map("cost_center_id") @db.Uuid
+  costCenter     CostCenter?   @relation(fields: [costCenterId], references: [id])
+
+  // Documentos del empleado
+  documents EmployeeDocument[]
+
+  // Asignaciones a clientes/contratistas
+  contractorAllocations ContractorEmployee[]
+
+  // Vinculación con usuario del sistema (si este empleado tiene acceso)
+  companyMember CompanyMember?
+
+  // Invitaciones pendientes para este empleado
+  pendingInvitations CompanyInvitation[]
+
+  @@unique([companyId, employeeNumber])
+  @@unique([companyId, cuil])
+  @@map("employees")
+}
+
+// ============================================
+// VEHÍCULOS/EQUIPOS
+// ============================================
+
+// Enums para vehículos
+enum VehicleStatus {
+  INCOMPLETE
+  COMPLETE
+  COMPLETE_EXPIRED_DOCS
+  APPROVED
+  NOT_APPROVED
+
+  @@map("vehicle_status")
+}
+
+enum VehicleCondition {
+  OPERATIVE
+  NOT_OPERATIVE
+  IN_REPAIR
+  CONDITIONAL_OPERATIVE
+  IN_PREPARATION
+
+  @@map("vehicle_condition")
+}
+
+enum VehicleTerminationReason {
+  SALE
+  TOTAL_LOSS
+  RETURN
+  OTHER
+
+  @@map("vehicle_termination_reason")
+}
+
+enum VehicleTitularityType {
+  LEASING
+  RENTAL
+  OWNED
+  PLEDGED
+
+  @@map("vehicle_titularity_type")
+}
+
+enum Currency {
+  USD
+  EUR
+  GBP
+  ARS
+
+  @@map("currency")
+}
+
+model Vehicle {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Identificación
+  internNumber String? @map("intern_number") // Número interno/legajo
+  domain       String? // Patente/Dominio
+  chassis      String? // Número de chasis
+  engine       String  // Número de motor
+  serie        String? // Número de serie
+  year         String  // Año del vehículo
+  kilometer    String? @default("0") // Kilometraje
+
+  // Imagen
+  pictureUrl String? @map("picture_url")
+  pictureKey String? @map("picture_key")
+
+  // Estado
+  status    VehicleStatus    @default(INCOMPLETE)
+  condition VehicleCondition @default(OPERATIVE)
+  isActive  Boolean          @default(true) @map("is_active")
+
+  // Baja
+  terminationDate   DateTime?                @map("termination_date")
+  terminationReason VehicleTerminationReason? @map("termination_reason")
+
+  // Información de titularidad/propiedad
+  titularityType         VehicleTitularityType? @map("titularity_type")
+  contractNumber         String?                @map("contract_number")
+  contractStartDate      DateTime?              @map("contract_start_date")
+  contractExpirationDate DateTime?              @map("contract_expiration_date")
+  currency               Currency?
+  price                  Decimal?               @db.Decimal(12, 2) // Valor del equipo
+  monthlyPrice           Decimal?               @map("monthly_price") @db.Decimal(12, 2) // Valor mensual (leasing/alquiler)
+
+  // Titular del equipo (cuando no es propio)
+  ownerId String?         @map("owner_id") @db.Uuid
+  owner   EquipmentOwner? @relation(fields: [ownerId], references: [id])
+
+  // Tipo de costo
+  costType CostType? @map("cost_type")
+
+  // Relaciones con empresa
+  companyId String  @map("company_id") @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  // Relaciones con catálogos
+  brandId String?       @map("brand_id") @db.Uuid
+  brand   VehicleBrand? @relation(fields: [brandId], references: [id])
+
+  modelId String?       @map("model_id") @db.Uuid
+  model   VehicleModel? @relation(fields: [modelId], references: [id])
+
+  typeId String      @map("type_id") @db.Uuid
+  type   VehicleType @relation(fields: [typeId], references: [id])
+
+  typeOfVehicleId String        @map("type_of_vehicle_id") @db.Uuid
+  typeOfVehicle   TypeOfVehicle @relation(fields: [typeOfVehicleId], references: [id])
+
+  costCenterId String?     @map("cost_center_id") @db.Uuid
+  costCenter   CostCenter? @relation(fields: [costCenterId], references: [id])
+
+  sectorId String? @map("sector_id") @db.Uuid
+  sector   Sector? @relation(fields: [sectorId], references: [id])
+
+  typeOperativeId String?        @map("type_operative_id") @db.Uuid
+  typeOperative   TypeOperative? @relation(fields: [typeOperativeId], references: [id])
+
+  // Asignación a contratistas
+  contractorAllocations ContractorVehicle[]
+
+  // Documentos del vehículo
+  documents EquipmentDocument[]
+
+  @@unique([companyId, internNumber])
+  @@unique([companyId, domain])
+  @@map("vehicles")
+}

@@ -1,0 +1,4 @@
+﻿
+> newproject@0.1.0 cy:run
+> cypress run
+
