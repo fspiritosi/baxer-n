@@ -16,6 +16,7 @@ export const MODULES = {
   employees: 'employees',
   equipment: 'equipment',
   documents: 'documents',
+  accounting: 'accounting',
 
   // Módulo Comercial
   'commercial.clients': 'commercial.clients',
@@ -47,6 +48,12 @@ export const MODULES = {
 
   // Configuración de Empresa - Tipos de Documento
   'company.document-types': 'company.document-types',
+
+  // Módulo Contable
+  'accounting.accounts': 'accounting.accounts',
+  'accounting.entries': 'accounting.entries',
+  'accounting.reports': 'accounting.reports',
+  'accounting.settings': 'accounting.settings',
 } as const;
 
 export type Module = (typeof MODULES)[keyof typeof MODULES];
@@ -73,6 +80,7 @@ export const MODULE_LABELS: Record<Module, string> = {
   employees: 'Empleados',
   equipment: 'Equipos',
   documents: 'Documentos',
+  accounting: 'Contabilidad',
 
   'commercial.clients': 'Clientes',
   'commercial.leads': 'Leads',
@@ -99,6 +107,12 @@ export const MODULE_LABELS: Record<Module, string> = {
   'company.contractors': 'Contratistas',
 
   'company.document-types': 'Tipos de Documento',
+
+  // Módulo Contable
+  'accounting.accounts': 'Plan de Cuentas',
+  'accounting.entries': 'Asientos',
+  'accounting.reports': 'Informes',
+  'accounting.settings': 'Configuración Contable',
 };
 
 export const ACTION_LABELS: Record<Action, string> = {
@@ -115,7 +129,7 @@ export const ACTION_LABELS: Record<Action, string> = {
 export const MODULE_GROUPS = {
   principal: {
     label: 'Principal',
-    modules: ['dashboard', 'employees', 'equipment', 'documents'] as Module[],
+    modules: ['dashboard', 'employees', 'equipment', 'documents', 'accounting'] as Module[],
   },
   comercial: {
     label: 'Comercial',
@@ -160,6 +174,15 @@ export const MODULE_GROUPS = {
   configuracionDocumentos: {
     label: 'Configuración - Documentos',
     modules: ['company.document-types'] as Module[],
+  },
+  configuracionContable: {
+    label: 'Configuración - Contabilidad',
+    modules: [
+      'accounting.accounts',
+      'accounting.entries',
+      'accounting.reports',
+      'accounting.settings',
+    ] as Module[],
   },
 } as const;
 

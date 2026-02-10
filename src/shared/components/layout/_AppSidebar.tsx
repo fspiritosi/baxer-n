@@ -14,13 +14,14 @@ import {
   Truck,
   Users,
   Wrench,
+  Wallet,
   type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import * as React from 'react';
 
-import type { CompanyListItem } from '@/modules/companies/actionsServer';
+import type { CompanyListItem } from '@/modules/companies/features/list/actions.server';
 import type { SidebarPermissions } from '@/shared/actions/sidebar';
 import type { Module } from '@/shared/lib/permissions';
 import {
@@ -65,17 +66,28 @@ interface NavSubGroup {
 interface NavItemWithSub {
   title: string;
   href?: string;
-  icon: LucideIcon;
+  icon?: LucideIcon;
+  disabled?: boolean;
+  module?: Module | null;
   items?: NavItem[];
   subGroups?: NavSubGroup[];
 }
 
-// Navegación principal (sin subitems)
-const navMain: NavItem[] = [
+// Navegación principal (con algunos subitems)
+const navMain: NavItemWithSub[] = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, module: null },
   { title: 'Empleados', href: '/dashboard/employees', icon: Users, module: 'employees' },
   { title: 'Equipos', href: '/dashboard/equipment', icon: Truck, module: 'equipment' },
   { title: 'Documentos', href: '/dashboard/documents', icon: FileText, module: 'documents' },
+  {
+    title: 'Contabilidad',
+    icon: Wallet,
+    items: [
+      { title: 'Dashboard', href: '/dashboard/accounting', module: 'accounting' },
+      { title: 'Asientos', href: '/dashboard/company/accounting/entries', module: 'accounting.entries' },
+      { title: 'Informes', href: '/dashboard/company/accounting/reports', module: 'accounting.reports' },
+    ],
+  },
   { title: 'Operaciones', href: '/dashboard/operations', icon: ClipboardList, disabled: true, module: null },
   { title: 'Mantenimiento', href: '/dashboard/maintenance', icon: Wrench, disabled: true, module: null },
 ];
@@ -141,6 +153,14 @@ const getNavConfig = (isSingleMode: boolean, activeCompanyId?: string): NavItemW
           { title: 'Leads', href: '/dashboard/company/commercial/leads', module: 'commercial.leads' },
           { title: 'Contactos', href: '/dashboard/company/commercial/contacts', module: 'commercial.contacts' },
           { title: 'Presupuestos', href: '/dashboard/company/commercial/quotes', disabled: true, module: 'commercial.quotes' },
+        ],
+      },
+      {
+        title: 'Contabilidad',
+        icon: Wallet,
+        items: [
+          { title: 'Plan de Cuentas', href: '/dashboard/company/accounting/accounts', module: 'accounting.accounts' },
+          { title: 'Configuración', href: '/dashboard/company/accounting/settings', module: 'accounting.settings' },
         ],
       },
     ],
@@ -214,6 +234,23 @@ export function _AppSidebar({
     return items.filter(canViewItem);
   };
 
+  // Filtrar items con subitems en navMain
+  const filterNavMainItems = (items: NavItemWithSub[]): NavItemWithSub[] => {
+    return items
+      .map((item) => ({
+        ...item,
+        items: item.items ? filterItems(item.items) : undefined,
+      }))
+      .filter((item) => {
+        // Si tiene items, debe tener al menos uno visible
+        if (item.items) {
+          return item.items.length > 0;
+        }
+        // Si no tiene items, verificar si es visible directamente
+        return item.href ? canViewItem(item as NavItem) : true;
+      });
+  };
+
   // Filtrar subgrupos - solo mostrar si tiene al menos un item visible
   const filterSubGroups = (subGroups: NavSubGroup[]): NavSubGroup[] => {
     return subGroups
@@ -238,7 +275,7 @@ export function _AppSidebar({
   };
 
   // Aplicar filtros
-  const filteredNavMain = filterItems(navMain);
+  const filteredNavMain = filterNavMainItems(navMain);
   const filteredNavConfig = filterNavConfig(navConfig);
 
   return (
@@ -259,25 +296,66 @@ export function _AppSidebar({
             <SidebarGroupContent>
               <SidebarMenu>
                 {filteredNavMain.map((item) => (
-                  <SidebarMenuItem key={item.href}>
-                    {item.disabled ? (
-                      <SidebarMenuButton
-                        tooltip={`${item.title} (Próximamente)`}
-                        disabled
-                        className="opacity-50 cursor-not-allowed"
+                  <React.Fragment key={item.title}>
+                    {/* Si tiene subitems, renderizar como collapsible */}
+                    {item.items ? (
+                      <Collapsible
+                        asChild
+                        defaultOpen={hasActiveSubItem(item.items)}
+                        className="group/collapsible"
                       >
-                        {item.icon && <item.icon className="size-4" />}
-                        <span>{item.title}</span>
-                      </SidebarMenuButton>
+                        <SidebarMenuItem>
+                          <CollapsibleTrigger asChild>
+                            <SidebarMenuButton tooltip={item.title}>
+                              {item.icon && <item.icon className="size-4" />}
+                              <span>{item.title}</span>
+                              <ChevronRight className="ml-auto size-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                            </SidebarMenuButton>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <SidebarMenuSub>
+                              {item.items.map((subItem) => (
+                                <SidebarMenuSubItem key={subItem.href}>
+                                  {subItem.disabled ? (
+                                    <span className="flex h-7 min-w-0 items-center gap-2 overflow-hidden rounded-md px-2 text-sidebar-foreground opacity-50 cursor-not-allowed text-sm">
+                                      {subItem.title}
+                                    </span>
+                                  ) : (
+                                    <SidebarMenuSubButton asChild isActive={isActive(subItem.href)}>
+                                      <Link href={subItem.href}>
+                                        <span>{subItem.title}</span>
+                                      </Link>
+                                    </SidebarMenuSubButton>
+                                  )}
+                                </SidebarMenuSubItem>
+                              ))}
+                            </SidebarMenuSub>
+                          </CollapsibleContent>
+                        </SidebarMenuItem>
+                      </Collapsible>
                     ) : (
-                      <SidebarMenuButton asChild tooltip={item.title} isActive={isActive(item.href)}>
-                        <Link href={item.href}>
-                          {item.icon && <item.icon className="size-4" />}
-                          <span>{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
+                      /* Si no tiene subitems, renderizar como item simple */
+                      <SidebarMenuItem>
+                        {item.disabled ? (
+                          <SidebarMenuButton
+                            tooltip={`${item.title} (Próximamente)`}
+                            disabled
+                            className="opacity-50 cursor-not-allowed"
+                          >
+                            {item.icon && <item.icon className="size-4" />}
+                            <span>{item.title}</span>
+                          </SidebarMenuButton>
+                        ) : (
+                          <SidebarMenuButton asChild tooltip={item.title} isActive={item.href ? isActive(item.href) : false}>
+                            <Link href={item.href!}>
+                              {item.icon && <item.icon className="size-4" />}
+                              <span>{item.title}</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        )}
+                      </SidebarMenuItem>
                     )}
-                  </SidebarMenuItem>
+                  </React.Fragment>
                 ))}
               </SidebarMenu>
             </SidebarGroupContent>
@@ -302,7 +380,7 @@ export function _AppSidebar({
                 <SidebarMenuItem>
                   <CollapsibleTrigger asChild>
                     <SidebarMenuButton tooltip={item.title}>
-                      <item.icon className="size-4" />
+                      {item.icon && <item.icon className="size-4" />}
                       <span>{item.title}</span>
                       <ChevronRight className="ml-auto size-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
                     </SidebarMenuButton>

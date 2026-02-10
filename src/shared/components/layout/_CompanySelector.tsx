@@ -20,7 +20,7 @@ import {
   useSidebar,
 } from '@/shared/components/ui/sidebar';
 
-import type { CompanyListItem } from '@/modules/companies/actionsServer';
+import type { CompanyListItem } from '@/modules/companies/features/list/actions.server';
 import { setActiveCompany } from '@/shared/lib/company';
 
 interface CompanySelectorProps {

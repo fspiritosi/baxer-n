@@ -1,6 +1,6 @@
 'use client';
 
-import type { CompanyListItem } from '@/modules/companies/actionsServer';
+import type { CompanyListItem } from '@/modules/companies/features/list/actions.server';
 import type { SidebarPermissions } from '@/shared/actions/sidebar';
 import { SidebarInset, SidebarProvider } from '@/shared/components/ui/sidebar';
 import { _AppSidebar } from './_AppSidebar';

@@ -1,5 +1,5 @@
 import { getActiveCompany } from '@/shared/lib/company';
-// import { getMyCompanies } from '@/modules/companies/actionsServer';
+// import { getMyCompanies } from '@/modules/companies/features/list/actions.server';
 import { NoCompanyFallback } from '@/modules/companies';
 import { getMyCompanies } from '@/modules/companies/features/list';
 import { getSidebarPermissions } from '@/shared/actions/sidebar';

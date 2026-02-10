@@ -130,7 +130,126 @@ model Company {
   contacts Contact[]
   quotes   Quote[]
 
+  // Módulo Contable
+  accounts            Account[]
+  journalEntries     JournalEntry[]
+  accountingSettings AccountingSettings?
+
   @@map("companies")
+}
+
+// ============================================
+// MÓDULO CONTABLE
+// ============================================
+
+// Tipo de Cuenta Contable
+enum AccountType {
+  ASSET          // Activo
+  LIABILITY      // Pasivo
+  EQUITY         // Patrimonio Neto
+  REVENUE        // Ingresos
+  EXPENSE        // Gastos
+
+  @@map("account_type")
+}
+
+// Naturaleza de la Cuenta (Saldo)
+enum AccountNature {
+  DEBIT          // Saldo Deudor
+  CREDIT         // Saldo Acreedor
+
+  @@map("account_nature")
+}
+
+// Estado del Asiento Contable
+enum JournalEntryStatus {
+  DRAFT         // Borrador
+  POSTED        // Registrado
+  REVERSED      // Anulado
+
+  @@map("journal_entry_status")
+}
+
+// Plan de Cuentas
+model Account {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId   String      @map("company_id") @db.Uuid
+  code        String      // Código contable (ej: 1.1.1)
+  name        String      // Nombre de la cuenta
+  type        AccountType
+  nature      AccountNature
+  description String?
+  parentId    String?     @map("parent_id") @db.Uuid
+  parent      Account?    @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children    Account[]   @relation("AccountHierarchy")
+  isActive    Boolean     @default(true) @map("is_active")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  entries     JournalEntryLine[]
+
+  @@unique([companyId, code])
+  @@map("accounts")
+}
+
+// Asientos Contables
+model JournalEntry {
+  id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId       String              @map("company_id") @db.Uuid
+  number          Int                 // Número de asiento
+  date            DateTime
+  description     String
+  status          JournalEntryStatus  @default(DRAFT)
+  postDate        DateTime?           @map("post_date")
+
+  // Campos de auditoría para reversiones
+  originalEntryId String?             @map("original_entry_id") @db.Uuid
+  reversalEntryId String?             @map("reversal_entry_id") @db.Uuid
+  reversedBy      String?             @map("reversed_by")
+  reversedAt      DateTime?           @map("reversed_at")
+
+  company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  lines           JournalEntryLine[]
+  createdBy       String              @map("created_by") // userId
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  // Relaciones de trazabilidad (self-referencing opcional)
+  originalEntry   JournalEntry?       @relation("ReversalOriginal", fields: [originalEntryId], references: [id], onDelete: SetNull)
+  reversalOf      JournalEntry[]      @relation("ReversalOriginal")
+  reversalEntry   JournalEntry?       @relation("ReversalLink", fields: [reversalEntryId], references: [id], onDelete: SetNull)
+  reversedBy_     JournalEntry[]      @relation("ReversalLink")
+
+  @@unique([companyId, number])
+  @@map("journal_entries")
+}
+
+// Líneas de Asiento
+model JournalEntryLine {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  entryId       String      @map("entry_id") @db.Uuid
+  accountId     String      @map("account_id") @db.Uuid
+  description   String?
+  debit         Decimal     @default(0) @db.Decimal(12, 2)
+  credit        Decimal     @default(0) @db.Decimal(12, 2)
+  entry         JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  account       Account     @relation(fields: [accountId], references: [id])
+
+  @@map("journal_entry_lines")
+}
+
+// Configuración Contable por Empresa
+model AccountingSettings {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId         String   @unique @map("company_id") @db.Uuid
+  fiscalYearStart   DateTime @map("fiscal_year_start")
+  fiscalYearEnd     DateTime @map("fiscal_year_end")
+  lastEntryNumber   Int      @default(0) @map("last_entry_number")
+  company           Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("accounting_settings")
 }
 
 model CompanyMember {

@@ -8,7 +8,7 @@ import {
   SidebarMenuItem,
 } from '@/shared/components/ui/sidebar';
 
-import type { CompanyListItem } from '@/modules/companies/actionsServer';
+import type { CompanyListItem } from '@/modules/companies/features/list/actions.server';
 
 interface CompanyDisplayProps {
   company: CompanyListItem;
