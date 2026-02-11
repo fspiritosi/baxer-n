@@ -1,0 +1,90 @@
+'use server';
+
+import { auth } from '@clerk/nextjs/server';
+import { prisma } from '@/shared/lib/prisma';
+import { getActiveCompanyId } from '@/shared/lib/company';
+
+// Obtener clientes activos para el selector
+export async function getActiveCustomers() {
+  const { userId: authUserId } = await auth();
+  if (!authUserId) throw new Error('No autenticado');
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  const customers = await prisma.contractor.findMany({
+    where: {
+      companyId: companyId,
+    },
+    select: {
+      id: true,
+      name: true,
+      taxId: true,
+      email: true,
+    },
+    orderBy: {
+      name: 'asc',
+    },
+  });
+
+  return customers;
+}
+
+// Obtener puntos de venta activos para el selector
+export async function getActivePointsOfSale() {
+  const { userId: authUserId } = await auth();
+  if (!authUserId) throw new Error('No autenticado');
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  const pointsOfSale = await prisma.salesPointOfSale.findMany({
+    where: {
+      companyId: companyId,
+      isActive: true,
+    },
+    select: {
+      id: true,
+      number: true,
+      name: true,
+      afipEnabled: true,
+    },
+    orderBy: {
+      number: 'asc',
+    },
+  });
+
+  return pointsOfSale;
+}
+
+// Obtener productos activos para el selector
+export async function getActiveProducts() {
+  const { userId: authUserId } = await auth();
+  if (!authUserId) throw new Error('No autenticado');
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  const products = await prisma.product.findMany({
+    where: {
+      companyId: companyId,
+      status: 'ACTIVE',
+    },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      description: true,
+      unitOfMeasure: true,
+      salePrice: true,
+      salePriceWithTax: true,
+      vatRate: true,
+      trackStock: true,
+    },
+    orderBy: {
+      name: 'asc',
+    },
+  });
+
+  return products;
+}

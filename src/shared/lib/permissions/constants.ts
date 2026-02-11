@@ -32,6 +32,7 @@ export const MODULES = {
   'commercial.stock': 'commercial.stock',
   'commercial.movements': 'commercial.movements',
   'commercial.points-of-sale': 'commercial.points-of-sale',
+  'commercial.invoices': 'commercial.invoices',
 
   // Configuración de Empresa - General
   'company.general.users': 'company.general.users',
@@ -104,6 +105,7 @@ export const MODULE_LABELS: Record<Module, string> = {
   'commercial.stock': 'Control de Stock',
   'commercial.movements': 'Movimientos',
   'commercial.points-of-sale': 'Puntos de Venta',
+  'commercial.invoices': 'Facturas de Venta',
 
   'company.general.users': 'Usuarios',
   'company.general.roles': 'Roles',
@@ -165,6 +167,7 @@ export const MODULE_GROUPS = {
       'commercial.stock',
       'commercial.movements',
       'commercial.points-of-sale',
+      'commercial.invoices',
     ] as Module[],
   },
   configuracionGeneral: {
