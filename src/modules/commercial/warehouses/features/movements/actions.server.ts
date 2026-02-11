@@ -48,7 +48,7 @@ export async function getStockProductsForSelect() {
     return await prisma.product.findMany({
       where: {
         companyId,
-        isActive: true,
+        status: 'ACTIVE',
         trackStock: true, // Solo productos con control de stock
       },
       select: {
@@ -100,7 +100,7 @@ export async function createStockAdjustment(data: unknown) {
       where: {
         id: validatedData.productId,
         companyId,
-        isActive: true,
+        status: 'ACTIVE',
       },
       select: {
         id: true,
@@ -271,7 +271,7 @@ export async function createStockTransfer(data: unknown) {
       where: {
         id: validatedData.productId,
         companyId,
-        isActive: true,
+        status: 'ACTIVE',
       },
       select: {
         id: true,

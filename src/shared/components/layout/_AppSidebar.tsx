@@ -1,17 +1,19 @@
 'use client';
 
 import {
-  Briefcase,
   Building2,
   ChevronRight,
   ClipboardList,
   FileText,
   HelpCircle,
   LayoutDashboard,
+  Package,
   Search,
   Settings,
   Shield,
+  ShoppingBag,
   ShoppingCart,
+  TrendingUp,
   Truck,
   Users,
   Wallet,
@@ -100,17 +102,101 @@ const navMain: NavItemWithSub[] = [
   {
     title: 'Comercial',
     icon: ShoppingCart,
-    items: [
-      { title: 'Dashboard', href: '/dashboard/commercial', module: 'commercial' },
+    subGroups: [
       {
-        title: 'Proveedores',
-        href: '/dashboard/commercial/suppliers',
-        module: 'commercial.suppliers',
+        title: 'Ventas',
+        icon: TrendingUp,
+        items: [
+          {
+            title: 'Clientes',
+            href: '/dashboard/company/commercial/clients',
+            module: 'commercial.clients',
+          },
+          {
+            title: 'Leads',
+            href: '/dashboard/company/commercial/leads',
+            module: 'commercial.leads',
+          },
+          {
+            title: 'Contactos',
+            href: '/dashboard/company/commercial/contacts',
+            module: 'commercial.contacts',
+          },
+          {
+            title: 'Cotizaciones',
+            href: '/dashboard/company/commercial/quotes',
+            module: 'commercial.quotes',
+            disabled: true,
+          },
+          {
+            title: 'Puntos de Venta',
+            href: '/dashboard/commercial/points-of-sale',
+            module: 'commercial.points-of-sale',
+          },
+          {
+            title: 'Facturas de Venta',
+            href: '/dashboard/commercial/invoices',
+            module: 'commercial.invoices',
+          },
+          {
+            title: 'Reportes de Ventas',
+            href: '/dashboard/commercial/reports',
+            module: 'commercial',
+          },
+        ],
       },
       {
-        title: 'Categorías',
-        href: '/dashboard/commercial/categories',
-        module: 'commercial.categories',
+        title: 'Compras',
+        icon: ShoppingBag,
+        items: [
+          {
+            title: 'Proveedores',
+            href: '/dashboard/commercial/suppliers',
+            module: 'commercial.suppliers',
+          },
+          {
+            title: 'Facturas de Compra',
+            href: '/dashboard/commercial/purchases',
+            module: 'commercial.purchases',
+          },
+        ],
+      },
+      {
+        title: 'Tesorería',
+        icon: Wallet,
+        items: [
+          {
+            title: 'Cajas',
+            href: '/dashboard/commercial/treasury/cash-registers',
+            module: 'commercial.treasury.cash-registers',
+          },
+          {
+            title: 'Bancos',
+            href: '/dashboard/commercial/treasury/bank-accounts',
+            module: 'commercial.treasury.bank-accounts',
+          },
+          {
+            title: 'Recibos de Cobro',
+            href: '/dashboard/commercial/treasury/receipts',
+            module: 'commercial.treasury.receipts',
+          },
+          {
+            title: 'Órdenes de Pago',
+            href: '/dashboard/commercial/treasury/payment-orders',
+            module: 'commercial.treasury.payment-orders',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Almacenes',
+    icon: Package,
+    items: [
+      {
+        title: 'Almacenes',
+        href: '/dashboard/commercial/warehouses',
+        module: 'commercial.warehouses',
       },
       {
         title: 'Productos',
@@ -123,12 +209,7 @@ const navMain: NavItemWithSub[] = [
         module: 'commercial.price-lists',
       },
       {
-        title: 'Almacenes',
-        href: '/dashboard/commercial/warehouses',
-        module: 'commercial.warehouses',
-      },
-      {
-        title: 'Control de Stock',
+        title: 'Inventario',
         href: '/dashboard/commercial/stock',
         module: 'commercial.stock',
       },
@@ -136,26 +217,6 @@ const navMain: NavItemWithSub[] = [
         title: 'Movimientos',
         href: '/dashboard/commercial/movements',
         module: 'commercial.movements',
-      },
-      {
-        title: 'Puntos de Venta',
-        href: '/dashboard/commercial/points-of-sale',
-        module: 'commercial.points-of-sale',
-      },
-      {
-        title: 'Facturas de Venta',
-        href: '/dashboard/commercial/invoices',
-        module: 'commercial.invoices',
-      },
-      {
-        title: 'Reportes de Ventas',
-        href: '/dashboard/commercial/reports',
-        module: 'commercial',
-      },
-      {
-        title: 'Facturas de Compra',
-        href: '/dashboard/commercial/purchases',
-        module: 'commercial.purchases',
       },
     ],
   },
@@ -286,29 +347,13 @@ const getNavConfig = (isSingleMode: boolean, activeCompanyId?: string): NavItemW
         ],
       },
       {
-        title: 'Comercial',
-        icon: Briefcase,
+        title: 'Almacenes',
+        icon: Package,
         items: [
           {
-            title: 'Clientes',
-            href: '/dashboard/company/commercial/clients',
-            module: 'commercial.clients',
-          },
-          {
-            title: 'Leads',
-            href: '/dashboard/company/commercial/leads',
-            module: 'commercial.leads',
-          },
-          {
-            title: 'Contactos',
-            href: '/dashboard/company/commercial/contacts',
-            module: 'commercial.contacts',
-          },
-          {
-            title: 'Presupuestos',
-            href: '/dashboard/company/commercial/quotes',
-            disabled: true,
-            module: 'commercial.quotes',
+            title: 'Categorías',
+            href: '/dashboard/commercial/categories',
+            module: 'commercial.categories',
           },
         ],
       },
@@ -405,13 +450,18 @@ export function _AppSidebar({
       .map((item) => ({
         ...item,
         items: item.items ? filterItems(item.items) : undefined,
+        subGroups: item.subGroups ? filterSubGroups(item.subGroups) : undefined,
       }))
       .filter((item) => {
+        // Si tiene subGroups, debe tener al menos uno visible
+        if (item.subGroups) {
+          return item.subGroups.length > 0;
+        }
         // Si tiene items, debe tener al menos uno visible
         if (item.items) {
           return item.items.length > 0;
         }
-        // Si no tiene items, verificar si es visible directamente
+        // Si no tiene items ni subGroups, verificar si es visible directamente
         return item.href ? canViewItem(item as NavItem) : true;
       });
   };
@@ -460,7 +510,7 @@ export function _AppSidebar({
               <SidebarMenu>
                 {filteredNavMain.map((item) => (
                   <React.Fragment key={item.title}>
-                    {/* Si tiene subitems, renderizar como collapsible */}
+                    {/* Si tiene subitems simples, renderizar como collapsible */}
                     {item.items ? (
                       <Collapsible
                         asChild
@@ -496,8 +546,69 @@ export function _AppSidebar({
                           </CollapsibleContent>
                         </SidebarMenuItem>
                       </Collapsible>
+                    ) : item.subGroups ? (
+                      /* Si tiene subgrupos, renderizar como collapsible con subgrupos anidados */
+                      <Collapsible
+                        asChild
+                        defaultOpen={hasActiveInSubGroups(item.subGroups)}
+                        className="group/collapsible"
+                      >
+                        <SidebarMenuItem>
+                          <CollapsibleTrigger asChild>
+                            <SidebarMenuButton tooltip={item.title}>
+                              {item.icon && <item.icon className="size-4" />}
+                              <span>{item.title}</span>
+                              <ChevronRight className="ml-auto size-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                            </SidebarMenuButton>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <SidebarMenuSub>
+                              {item.subGroups.map((subGroup) => (
+                                <Collapsible
+                                  key={subGroup.title}
+                                  asChild
+                                  defaultOpen={hasActiveInSubGroup(subGroup)}
+                                  className="group/subgroup"
+                                >
+                                  <SidebarMenuSubItem>
+                                    <CollapsibleTrigger asChild>
+                                      <SidebarMenuSubButton className="cursor-pointer font-medium">
+                                        <subGroup.icon className="size-3.5" />
+                                        <span>{subGroup.title}</span>
+                                        <ChevronRight className="ml-auto size-3 transition-transform duration-200 group-data-[state=open]/subgroup:rotate-90" />
+                                      </SidebarMenuSubButton>
+                                    </CollapsibleTrigger>
+                                    <CollapsibleContent>
+                                      <div className="ml-4 border-l pl-2 mt-1 space-y-0.5">
+                                        {subGroup.items.map((subGroupItem) => (
+                                          <SidebarMenuSubButton
+                                            key={subGroupItem.href}
+                                            asChild
+                                            isActive={isActive(subGroupItem.href)}
+                                            className="h-7"
+                                          >
+                                            {subGroupItem.disabled ? (
+                                              <span className="flex items-center text-sidebar-foreground opacity-50 cursor-not-allowed">
+                                                <span className="text-xs">{subGroupItem.title}</span>
+                                              </span>
+                                            ) : (
+                                              <Link href={subGroupItem.href}>
+                                                <span className="text-xs">{subGroupItem.title}</span>
+                                              </Link>
+                                            )}
+                                          </SidebarMenuSubButton>
+                                        ))}
+                                      </div>
+                                    </CollapsibleContent>
+                                  </SidebarMenuSubItem>
+                                </Collapsible>
+                              ))}
+                            </SidebarMenuSub>
+                          </CollapsibleContent>
+                        </SidebarMenuItem>
+                      </Collapsible>
                     ) : (
-                      /* Si no tiene subitems, renderizar como item simple */
+                      /* Si no tiene subitems ni subgrupos, renderizar como item simple */
                       <SidebarMenuItem>
                         {item.disabled ? (
                           <SidebarMenuButton

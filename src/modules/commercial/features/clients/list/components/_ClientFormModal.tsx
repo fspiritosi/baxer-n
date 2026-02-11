@@ -36,6 +36,7 @@ import {
 } from '@/shared/components/ui/select';
 import { Separator } from '@/shared/components/ui/separator';
 import { ToggleGroup, ToggleGroupItem } from '@/shared/components/ui/toggle-group';
+import { customerTaxConditionLabels } from '@/shared/utils/mappers';
 import {
   createClient,
   getAvailableContacts,
@@ -49,6 +50,9 @@ const formSchema = z.object({
   email: z.string().email('Email inválido').optional().or(z.literal('')),
   phone: z.string().optional(),
   address: z.string().optional(),
+  taxCondition: z
+    .enum(['RESPONSABLE_INSCRIPTO', 'MONOTRIBUTISTA', 'EXENTO', 'CONSUMIDOR_FINAL'])
+    .optional(),
   // Contacto - selector o inline
   contactId: z.string().optional(),
   // Contacto inline
@@ -90,6 +94,7 @@ export function _ClientFormModal({ open, onOpenChange, client, onSuccess }: Prop
       email: '',
       phone: '',
       address: '',
+      taxCondition: 'CONSUMIDOR_FINAL',
       contactId: '',
       contactFirstName: '',
       contactLastName: '',
@@ -109,6 +114,7 @@ export function _ClientFormModal({ open, onOpenChange, client, onSuccess }: Prop
         email: client?.email || '',
         phone: client?.phone || '',
         address: client?.address || '',
+        taxCondition: client?.taxCondition || 'CONSUMIDOR_FINAL',
         // Si tiene contacto existente, seteamos su ID
         contactId: hasContact ? client!.contact!.id : '',
         contactFirstName: client?.contact?.firstName || '',
@@ -134,6 +140,7 @@ export function _ClientFormModal({ open, onOpenChange, client, onSuccess }: Prop
         email: data.email || undefined,
         phone: data.phone || undefined,
         address: data.address || undefined,
+        taxCondition: data.taxCondition,
       };
 
       let input;
@@ -222,18 +229,43 @@ export function _ClientFormModal({ open, onOpenChange, client, onSuccess }: Prop
 
                 <FormField
                   control={form.control}
-                  name="phone"
+                  name="taxCondition"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Teléfono</FormLabel>
-                      <FormControl>
-                        <Input placeholder="+54 XXX XXX-XXXX" {...field} />
-                      </FormControl>
+                      <FormLabel>Condición de IVA</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecciona condición de IVA" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {Object.entries(customerTaxConditionLabels).map(([value, label]) => (
+                            <SelectItem key={value} value={value}>
+                              {label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
+
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Teléfono</FormLabel>
+                    <FormControl>
+                      <Input placeholder="+54 XXX XXX-XXXX" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               <FormField
                 control={form.control}

@@ -1,0 +1,159 @@
+'use server';
+
+import { getActiveCompanyId } from '@/shared/lib/company';
+import { logger } from '@/shared/lib/logger';
+import { prisma } from '@/shared/lib/prisma';
+import type { BankAccountWithBalance } from '../../../shared/types';
+
+interface GetBankAccountsParams {
+  includeInactive?: boolean;
+}
+
+/**
+ * Obtiene la lista de cuentas bancarias de la empresa activa
+ */
+export async function getBankAccounts(
+  params: GetBankAccountsParams = {}
+): Promise<BankAccountWithBalance[]> {
+  const { includeInactive = false } = params;
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const where = {
+      companyId,
+      ...(!includeInactive && { status: 'ACTIVE' as const }),
+    };
+
+    const bankAccounts = await prisma.bankAccount.findMany({
+      where,
+      select: {
+        id: true,
+        bankName: true,
+        accountNumber: true,
+        accountType: true,
+        cbu: true,
+        alias: true,
+        currency: true,
+        balance: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: {
+          select: {
+            movements: true,
+          },
+        },
+      },
+      orderBy: [{ bankName: 'asc' }, { accountNumber: 'asc' }],
+    });
+
+    return bankAccounts.map((account) => ({
+      ...account,
+      balance: Number(account.balance),
+    })) as BankAccountWithBalance[];
+  } catch (error) {
+    logger.error('Error al obtener cuentas bancarias', { data: { error } });
+    throw new Error('Error al obtener cuentas bancarias');
+  }
+}
+
+/**
+ * Obtiene el detalle de una cuenta bancaria específica
+ */
+export async function getBankAccount(id: string) {
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const bankAccount = await prisma.bankAccount.findFirst({
+      where: { id, companyId },
+      select: {
+        id: true,
+        bankName: true,
+        accountNumber: true,
+        accountType: true,
+        cbu: true,
+        alias: true,
+        currency: true,
+        balance: true,
+        status: true,
+        accountId: true,
+        createdAt: true,
+        updatedAt: true,
+        account: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!bankAccount) {
+      throw new Error('Cuenta bancaria no encontrada');
+    }
+
+    return {
+      ...bankAccount,
+      balance: Number(bankAccount.balance),
+    };
+  } catch (error) {
+    logger.error('Error al obtener cuenta bancaria', { data: { error, id } });
+    throw new Error('Error al obtener cuenta bancaria');
+  }
+}
+
+/**
+ * Verifica si existe una cuenta con el número especificado
+ */
+export async function checkAccountNumberExists(accountNumber: string, excludeId?: string): Promise<boolean> {
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const existing = await prisma.bankAccount.findFirst({
+      where: {
+        companyId,
+        accountNumber,
+        ...(excludeId && { id: { not: excludeId } }),
+      },
+      select: { id: true },
+    });
+
+    return !!existing;
+  } catch (error) {
+    logger.error('Error al verificar número de cuenta', { data: { error, accountNumber } });
+    return false;
+  }
+}
+
+/**
+ * Obtiene cuentas contables disponibles para vincular
+ */
+export async function getAvailableAccounts() {
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const accounts = await prisma.account.findMany({
+      where: {
+        companyId,
+        isActive: true,
+        type: 'ASSET', // Solo cuentas de activo
+      },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+      },
+      orderBy: { code: 'asc' },
+    });
+
+    return accounts;
+  } catch (error) {
+    logger.error('Error al obtener cuentas contables', { data: { error } });
+    return [];
+  }
+}

@@ -34,6 +34,10 @@ export const MODULES = {
   'commercial.points-of-sale': 'commercial.points-of-sale',
   'commercial.invoices': 'commercial.invoices',
   'commercial.purchases': 'commercial.purchases',
+  'commercial.treasury.cash-registers': 'commercial.treasury.cash-registers',
+  'commercial.treasury.bank-accounts': 'commercial.treasury.bank-accounts',
+  'commercial.treasury.receipts': 'commercial.treasury.receipts',
+  'commercial.treasury.payment-orders': 'commercial.treasury.payment-orders',
 
   // Configuración de Empresa - General
   'company.general.users': 'company.general.users',
@@ -108,6 +112,10 @@ export const MODULE_LABELS: Record<Module, string> = {
   'commercial.points-of-sale': 'Puntos de Venta',
   'commercial.invoices': 'Facturas de Venta',
   'commercial.purchases': 'Facturas de Compra',
+  'commercial.treasury.cash-registers': 'Cajas',
+  'commercial.treasury.bank-accounts': 'Bancos',
+  'commercial.treasury.receipts': 'Recibos de Cobro',
+  'commercial.treasury.payment-orders': 'Órdenes de Pago',
 
   'company.general.users': 'Usuarios',
   'company.general.roles': 'Roles',
@@ -171,6 +179,10 @@ export const MODULE_GROUPS = {
       'commercial.points-of-sale',
       'commercial.invoices',
       'commercial.purchases',
+      'commercial.treasury.cash-registers',
+      'commercial.treasury.bank-accounts',
+      'commercial.treasury.receipts',
+      'commercial.treasury.payment-orders',
     ] as Module[],
   },
   configuracionGeneral: {

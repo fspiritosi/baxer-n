@@ -1,0 +1,314 @@
+'use server';
+
+import { auth } from '@clerk/nextjs/server';
+import { getActiveCompanyId } from '@/shared/lib/company';
+import { logger } from '@/shared/lib/logger';
+import { prisma } from '@/shared/lib/prisma';
+import { revalidatePath } from 'next/cache';
+import { Prisma } from '@/generated/prisma/client';
+import { bankAccountSchema, type BankAccountFormData } from '../../shared/validators';
+
+/**
+ * Crea una nueva cuenta bancaria
+ */
+export async function createBankAccount(data: BankAccountFormData) {
+  const { userId } = await auth();
+  if (!userId) throw new Error('No autenticado');
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    // Validar datos
+    const validated = bankAccountSchema.parse(data);
+
+    // Verificar número de cuenta duplicado
+    const existing = await prisma.bankAccount.findFirst({
+      where: {
+        companyId,
+        accountNumber: validated.accountNumber,
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      throw new Error('Ya existe una cuenta con ese número');
+    }
+
+    // Crear cuenta bancaria
+    const balance = validated.balance ? new Prisma.Decimal(validated.balance) : new Prisma.Decimal(0);
+
+    const bankAccount = await prisma.bankAccount.create({
+      data: {
+        companyId,
+        bankName: validated.bankName,
+        accountNumber: validated.accountNumber,
+        accountType: validated.accountType,
+        cbu: validated.cbu || null,
+        alias: validated.alias || null,
+        currency: validated.currency,
+        balance,
+        accountId: validated.accountId || null,
+        createdBy: userId,
+      },
+    });
+
+    logger.info('Cuenta bancaria creada', {
+      data: {
+        bankAccountId: bankAccount.id,
+        bankName: bankAccount.bankName,
+        accountNumber: bankAccount.accountNumber,
+      },
+    });
+
+    revalidatePath('/dashboard/commercial/treasury/bank-accounts');
+
+    return { success: true, data: bankAccount };
+  } catch (error) {
+    logger.error('Error al crear cuenta bancaria', { data: { error } });
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('Error al crear cuenta bancaria');
+  }
+}
+
+/**
+ * Actualiza una cuenta bancaria existente
+ */
+export async function updateBankAccount(id: string, data: BankAccountFormData) {
+  const { userId } = await auth();
+  if (!userId) throw new Error('No autenticado');
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    // Validar datos
+    const validated = bankAccountSchema.parse(data);
+
+    // Verificar que la cuenta existe y pertenece a la empresa
+    const existing = await prisma.bankAccount.findFirst({
+      where: { id, companyId },
+      select: { id: true, accountNumber: true },
+    });
+
+    if (!existing) {
+      throw new Error('Cuenta bancaria no encontrada');
+    }
+
+    // Verificar número de cuenta duplicado (excluyendo la cuenta actual)
+    if (validated.accountNumber !== existing.accountNumber) {
+      const duplicate = await prisma.bankAccount.findFirst({
+        where: {
+          companyId,
+          accountNumber: validated.accountNumber,
+          id: { not: id },
+        },
+        select: { id: true },
+      });
+
+      if (duplicate) {
+        throw new Error('Ya existe una cuenta con ese número');
+      }
+    }
+
+    // Actualizar cuenta bancaria (no actualizar balance aquí, solo con movimientos)
+    const bankAccount = await prisma.bankAccount.update({
+      where: { id },
+      data: {
+        bankName: validated.bankName,
+        accountNumber: validated.accountNumber,
+        accountType: validated.accountType,
+        cbu: validated.cbu || null,
+        alias: validated.alias || null,
+        currency: validated.currency,
+        accountId: validated.accountId || null,
+      },
+    });
+
+    logger.info('Cuenta bancaria actualizada', {
+      data: {
+        bankAccountId: bankAccount.id,
+        bankName: bankAccount.bankName,
+        accountNumber: bankAccount.accountNumber,
+      },
+    });
+
+    revalidatePath('/dashboard/commercial/treasury/bank-accounts');
+
+    return { success: true, data: bankAccount };
+  } catch (error) {
+    logger.error('Error al actualizar cuenta bancaria', { data: { error, id } });
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('Error al actualizar cuenta bancaria');
+  }
+}
+
+/**
+ * Desactiva una cuenta bancaria
+ */
+export async function deactivateBankAccount(id: string) {
+  const { userId } = await auth();
+  if (!userId) throw new Error('No autenticado');
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    // Verificar que la cuenta existe y pertenece a la empresa
+    const bankAccount = await prisma.bankAccount.findFirst({
+      where: { id, companyId },
+      select: {
+        id: true,
+        bankName: true,
+        accountNumber: true,
+        balance: true,
+      },
+    });
+
+    if (!bankAccount) {
+      throw new Error('Cuenta bancaria no encontrada');
+    }
+
+    // Advertir si tiene saldo
+    if (!bankAccount.balance.isZero()) {
+      logger.warn('Desactivando cuenta bancaria con saldo', {
+        data: {
+          bankAccountId: id,
+          balance: bankAccount.balance.toNumber(),
+        },
+      });
+    }
+
+    // Desactivar cuenta
+    await prisma.bankAccount.update({
+      where: { id },
+      data: { status: 'INACTIVE' },
+    });
+
+    logger.info('Cuenta bancaria desactivada', {
+      data: {
+        bankAccountId: id,
+        bankName: bankAccount.bankName,
+        accountNumber: bankAccount.accountNumber,
+      },
+    });
+
+    revalidatePath('/dashboard/commercial/treasury/bank-accounts');
+
+    return { success: true };
+  } catch (error) {
+    logger.error('Error al desactivar cuenta bancaria', { data: { error, id } });
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('Error al desactivar cuenta bancaria');
+  }
+}
+
+/**
+ * Activa una cuenta bancaria desactivada
+ */
+export async function activateBankAccount(id: string) {
+  const { userId } = await auth();
+  if (!userId) throw new Error('No autenticado');
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    // Verificar que la cuenta existe y pertenece a la empresa
+    const bankAccount = await prisma.bankAccount.findFirst({
+      where: { id, companyId },
+      select: { id: true, bankName: true, accountNumber: true },
+    });
+
+    if (!bankAccount) {
+      throw new Error('Cuenta bancaria no encontrada');
+    }
+
+    // Activar cuenta
+    await prisma.bankAccount.update({
+      where: { id },
+      data: { status: 'ACTIVE' },
+    });
+
+    logger.info('Cuenta bancaria activada', {
+      data: {
+        bankAccountId: id,
+        bankName: bankAccount.bankName,
+        accountNumber: bankAccount.accountNumber,
+      },
+    });
+
+    revalidatePath('/dashboard/commercial/treasury/bank-accounts');
+
+    return { success: true };
+  } catch (error) {
+    logger.error('Error al activar cuenta bancaria', { data: { error, id } });
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('Error al activar cuenta bancaria');
+  }
+}
+
+/**
+ * Cierra una cuenta bancaria (permanente)
+ */
+export async function closeBankAccount(id: string) {
+  const { userId } = await auth();
+  if (!userId) throw new Error('No autenticado');
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    // Verificar que la cuenta existe y pertenece a la empresa
+    const bankAccount = await prisma.bankAccount.findFirst({
+      where: { id, companyId },
+      select: {
+        id: true,
+        bankName: true,
+        accountNumber: true,
+        balance: true,
+      },
+    });
+
+    if (!bankAccount) {
+      throw new Error('Cuenta bancaria no encontrada');
+    }
+
+    // No permitir cerrar cuenta con saldo
+    if (!bankAccount.balance.isZero()) {
+      throw new Error('No se puede cerrar una cuenta con saldo. Debe estar en $0.00');
+    }
+
+    // Cerrar cuenta
+    await prisma.bankAccount.update({
+      where: { id },
+      data: { status: 'CLOSED' },
+    });
+
+    logger.info('Cuenta bancaria cerrada', {
+      data: {
+        bankAccountId: id,
+        bankName: bankAccount.bankName,
+        accountNumber: bankAccount.accountNumber,
+      },
+    });
+
+    revalidatePath('/dashboard/commercial/treasury/bank-accounts');
+
+    return { success: true };
+  } catch (error) {
+    logger.error('Error al cerrar cuenta bancaria', { data: { error, id } });
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('Error al cerrar cuenta bancaria');
+  }
+}
