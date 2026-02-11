@@ -137,6 +137,7 @@ model Company {
   stockMovements    StockMovement[]
   salesPointsOfSale SalesPointOfSale[]
   salesInvoices     SalesInvoice[]
+  purchaseInvoices  PurchaseInvoice[]
 
   // Módulo Contable
   accounts            Account[]
@@ -221,6 +222,7 @@ model JournalEntry {
   company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   lines           JournalEntryLine[]
   salesInvoices   SalesInvoice[]
+  purchaseInvoices PurchaseInvoice[]
   createdBy       String              @map("created_by") // userId
   createdAt       DateTime            @default(now()) @map("created_at")
   updatedAt       DateTime            @updatedAt @map("updated_at")
@@ -1612,6 +1614,7 @@ model Supplier {
   // Relaciones
   company           Company               @relation(fields: [companyId], references: [id])
   defaultAccount    Account?              @relation(fields: [defaultAccountId], references: [id])
+  purchaseInvoices  PurchaseInvoice[]
 
   createdBy         String                @map("created_by")
   createdAt         DateTime              @default(now()) @map("created_at")
@@ -1687,6 +1690,7 @@ model Product {
   stockMovements      StockMovement[]
   warehouseStocks     WarehouseStock[]
   salesInvoiceLines   SalesInvoiceLine[]
+  purchaseInvoiceLines PurchaseInvoiceLine[]
 
   createdBy           String          @map("created_by")
   createdAt           DateTime        @default(now()) @map("created_at")
@@ -1833,6 +1837,16 @@ enum SalesInvoiceStatus {
   @@map("sales_invoice_status")
 }
 
+enum PurchaseInvoiceStatus {
+  DRAFT             // Borrador
+  CONFIRMED         // Confirmada
+  PAID              // Pagada
+  PARTIAL_PAID      // Parcialmente pagada
+  CANCELLED         // Anulada
+
+  @@map("purchase_invoice_status")
+}
+
 model SalesPointOfSale {
   id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   companyId       String    @map("company_id") @db.Uuid
@@ -1924,4 +1938,78 @@ model SalesInvoiceLine {
   product         Product         @relation(fields: [productId], references: [id])
 
   @@map("sales_invoice_lines")
+}
+
+// ============================================
+// MÓDULO COMERCIAL - Facturación de Compras
+// ============================================
+
+model PurchaseInvoice {
+  id                String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId         String                  @map("company_id") @db.Uuid
+  supplierId        String                  @map("supplier_id") @db.Uuid
+
+  // Datos del comprobante del proveedor
+  voucherType       VoucherType             @map("voucher_type")
+  pointOfSale       String                  @map("point_of_sale")  // Punto de venta del proveedor
+  number            String                  // Número del comprobante
+  fullNumber        String                  @map("full_number")    // 0001-00000123
+
+  // Fechas
+  issueDate         DateTime                @map("issue_date")
+  dueDate           DateTime?               @map("due_date")
+
+  // Validación AFIP
+  cae               String?
+  validated         Boolean                 @default(false)
+
+  // Importes
+  subtotal          Decimal                 @default(0) @db.Decimal(12, 2)
+  vatAmount         Decimal                 @default(0) @map("vat_amount") @db.Decimal(12, 2)
+  otherTaxes        Decimal                 @default(0) @map("other_taxes") @db.Decimal(12, 2)
+  total             Decimal                 @default(0) @db.Decimal(12, 2)
+
+  // Observaciones
+  notes             String?
+
+  // Estado
+  status            PurchaseInvoiceStatus   @default(DRAFT)
+
+  // Relación con contabilidad (futura)
+  journalEntryId    String?                 @map("journal_entry_id") @db.Uuid
+
+  // Relaciones
+  company           Company                 @relation(fields: [companyId], references: [id])
+  supplier          Supplier                @relation(fields: [supplierId], references: [id])
+  lines             PurchaseInvoiceLine[]
+  journalEntry      JournalEntry?           @relation(fields: [journalEntryId], references: [id])
+
+  createdBy         String                  @map("created_by")
+  createdAt         DateTime                @default(now()) @map("created_at")
+  updatedAt         DateTime                @updatedAt @map("updated_at")
+
+  @@unique([companyId, supplierId, fullNumber])
+  @@map("purchase_invoices")
+}
+
+model PurchaseInvoiceLine {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoiceId       String            @map("invoice_id") @db.Uuid
+  productId       String?           @map("product_id") @db.Uuid  // Opcional si es un gasto no inventariable
+
+  description     String
+  quantity        Decimal           @db.Decimal(12, 3)
+  unitCost        Decimal           @map("unit_cost") @db.Decimal(12, 2)
+
+  // Impuestos
+  vatRate         Decimal           @map("vat_rate") @db.Decimal(5, 2)
+  vatAmount       Decimal           @map("vat_amount") @db.Decimal(12, 2)
+
+  subtotal        Decimal           @db.Decimal(12, 2)
+  total           Decimal           @db.Decimal(12, 2)
+
+  invoice         PurchaseInvoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product         Product?          @relation(fields: [productId], references: [id])
+
+  @@map("purchase_invoice_lines")
 }

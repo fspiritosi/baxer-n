@@ -152,6 +152,11 @@ const navMain: NavItemWithSub[] = [
         href: '/dashboard/commercial/reports',
         module: 'commercial',
       },
+      {
+        title: 'Facturas de Compra',
+        href: '/dashboard/commercial/purchases',
+        module: 'commercial.purchases',
+      },
     ],
   },
   {
