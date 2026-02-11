@@ -1,0 +1,1 @@
+export { CreatePointOfSale } from './CreatePointOfSale';

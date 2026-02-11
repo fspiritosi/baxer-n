@@ -19,10 +19,19 @@ export const MODULES = {
   accounting: 'accounting',
 
   // Módulo Comercial
+  commercial: 'commercial',
   'commercial.clients': 'commercial.clients',
   'commercial.leads': 'commercial.leads',
   'commercial.contacts': 'commercial.contacts',
   'commercial.quotes': 'commercial.quotes',
+  'commercial.suppliers': 'commercial.suppliers',
+  'commercial.categories': 'commercial.categories',
+  'commercial.products': 'commercial.products',
+  'commercial.price-lists': 'commercial.price-lists',
+  'commercial.warehouses': 'commercial.warehouses',
+  'commercial.stock': 'commercial.stock',
+  'commercial.movements': 'commercial.movements',
+  'commercial.points-of-sale': 'commercial.points-of-sale',
 
   // Configuración de Empresa - General
   'company.general.users': 'company.general.users',
@@ -82,10 +91,19 @@ export const MODULE_LABELS: Record<Module, string> = {
   documents: 'Documentos',
   accounting: 'Contabilidad',
 
+  commercial: 'Comercial',
   'commercial.clients': 'Clientes',
   'commercial.leads': 'Leads',
   'commercial.contacts': 'Contactos',
   'commercial.quotes': 'Presupuestos',
+  'commercial.suppliers': 'Proveedores',
+  'commercial.categories': 'Categorías',
+  'commercial.products': 'Productos',
+  'commercial.price-lists': 'Listas de Precios',
+  'commercial.warehouses': 'Almacenes',
+  'commercial.stock': 'Control de Stock',
+  'commercial.movements': 'Movimientos',
+  'commercial.points-of-sale': 'Puntos de Venta',
 
   'company.general.users': 'Usuarios',
   'company.general.roles': 'Roles',
@@ -134,10 +152,19 @@ export const MODULE_GROUPS = {
   comercial: {
     label: 'Comercial',
     modules: [
+      'commercial',
       'commercial.clients',
       'commercial.leads',
       'commercial.contacts',
       'commercial.quotes',
+      'commercial.suppliers',
+      'commercial.categories',
+      'commercial.products',
+      'commercial.price-lists',
+      'commercial.warehouses',
+      'commercial.stock',
+      'commercial.movements',
+      'commercial.points-of-sale',
     ] as Module[],
   },
   configuracionGeneral: {

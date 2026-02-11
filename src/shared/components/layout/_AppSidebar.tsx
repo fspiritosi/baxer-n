@@ -11,10 +11,11 @@ import {
   Search,
   Settings,
   Shield,
+  ShoppingCart,
   Truck,
   Users,
-  Wrench,
   Wallet,
+  Wrench,
   type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -23,7 +24,6 @@ import * as React from 'react';
 
 import type { CompanyListItem } from '@/modules/companies/features/list/actions.server';
 import type { SidebarPermissions } from '@/shared/actions/sidebar';
-import type { Module } from '@/shared/lib/permissions';
 import {
   Collapsible,
   CollapsibleContent,
@@ -44,6 +44,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from '@/shared/components/ui/sidebar';
+import type { Module } from '@/shared/lib/permissions';
 import { _CompanyDisplay } from './_CompanyDisplay';
 import { _CompanySelector } from './_CompanySelector';
 import { _NavUser } from './nav/_NavUser';
@@ -84,12 +85,79 @@ const navMain: NavItemWithSub[] = [
     icon: Wallet,
     items: [
       { title: 'Dashboard', href: '/dashboard/accounting', module: 'accounting' },
-      { title: 'Asientos', href: '/dashboard/company/accounting/entries', module: 'accounting.entries' },
-      { title: 'Informes', href: '/dashboard/company/accounting/reports', module: 'accounting.reports' },
+      {
+        title: 'Asientos',
+        href: '/dashboard/company/accounting/entries',
+        module: 'accounting.entries',
+      },
+      {
+        title: 'Informes',
+        href: '/dashboard/company/accounting/reports',
+        module: 'accounting.reports',
+      },
     ],
   },
-  { title: 'Operaciones', href: '/dashboard/operations', icon: ClipboardList, disabled: true, module: null },
-  { title: 'Mantenimiento', href: '/dashboard/maintenance', icon: Wrench, disabled: true, module: null },
+  {
+    title: 'Comercial',
+    icon: ShoppingCart,
+    items: [
+      { title: 'Dashboard', href: '/dashboard/commercial', module: 'commercial' },
+      {
+        title: 'Proveedores',
+        href: '/dashboard/commercial/suppliers',
+        module: 'commercial.suppliers',
+      },
+      {
+        title: 'Categorías',
+        href: '/dashboard/commercial/categories',
+        module: 'commercial.categories',
+      },
+      {
+        title: 'Productos',
+        href: '/dashboard/commercial/products',
+        module: 'commercial.products',
+      },
+      {
+        title: 'Listas de Precios',
+        href: '/dashboard/commercial/price-lists',
+        module: 'commercial.price-lists',
+      },
+      {
+        title: 'Almacenes',
+        href: '/dashboard/commercial/warehouses',
+        module: 'commercial.warehouses',
+      },
+      {
+        title: 'Control de Stock',
+        href: '/dashboard/commercial/stock',
+        module: 'commercial.stock',
+      },
+      {
+        title: 'Movimientos',
+        href: '/dashboard/commercial/movements',
+        module: 'commercial.movements',
+      },
+      {
+        title: 'Puntos de Venta',
+        href: '/dashboard/commercial/points-of-sale',
+        module: 'commercial.points-of-sale',
+      },
+    ],
+  },
+  {
+    title: 'Operaciones',
+    href: '/dashboard/operations',
+    icon: ClipboardList,
+    disabled: true,
+    module: null,
+  },
+  {
+    title: 'Mantenimiento',
+    href: '/dashboard/maintenance',
+    icon: Wrench,
+    disabled: true,
+    module: null,
+  },
 ];
 
 // Configuración con subitems colapsables y subgrupos
@@ -102,9 +170,21 @@ const getNavConfig = (isSingleMode: boolean, activeCompanyId?: string): NavItemW
         title: 'Administración',
         icon: Shield,
         items: [
-          { title: 'Usuarios', href: '/dashboard/company/general/users', module: 'company.general.users' },
-          { title: 'Roles', href: '/dashboard/company/general/roles', module: 'company.general.roles' },
-          { title: 'Auditoría', href: '/dashboard/company/general/audit', module: 'company.general.audit' },
+          {
+            title: 'Usuarios',
+            href: '/dashboard/company/general/users',
+            module: 'company.general.users',
+          },
+          {
+            title: 'Roles',
+            href: '/dashboard/company/general/roles',
+            module: 'company.general.roles',
+          },
+          {
+            title: 'Auditoría',
+            href: '/dashboard/company/general/audit',
+            module: 'company.general.audit',
+          },
         ],
       },
       {
@@ -113,54 +193,124 @@ const getNavConfig = (isSingleMode: boolean, activeCompanyId?: string): NavItemW
         items: [
           {
             title: isSingleMode ? 'Empresa' : 'Empresas',
-            href: isSingleMode && activeCompanyId
-              ? `/dashboard/companies/${activeCompanyId}`
-              : '/dashboard/companies',
+            href:
+              isSingleMode && activeCompanyId
+                ? `/dashboard/companies/${activeCompanyId}`
+                : '/dashboard/companies',
             module: null, // Siempre visible - el usuario necesita ver su empresa
           },
-          { title: 'Centros de Costo', href: '/dashboard/company/cost-centers', module: 'company.cost-centers' },
-          { title: 'Documentos', href: '/dashboard/company/documents', module: 'company.documents' },
+          {
+            title: 'Centros de Costo',
+            href: '/dashboard/company/cost-centers',
+            module: 'company.cost-centers',
+          },
+          {
+            title: 'Documentos',
+            href: '/dashboard/company/documents',
+            module: 'company.documents',
+          },
         ],
       },
       {
         title: 'RRHH',
         icon: Users,
         items: [
-          { title: 'Tipos de Contrato', href: '/dashboard/company/contract-types', module: 'company.contract-types' },
-          { title: 'Puestos de Trabajo', href: '/dashboard/company/job-positions', module: 'company.job-positions' },
+          {
+            title: 'Tipos de Contrato',
+            href: '/dashboard/company/contract-types',
+            module: 'company.contract-types',
+          },
+          {
+            title: 'Puestos de Trabajo',
+            href: '/dashboard/company/job-positions',
+            module: 'company.job-positions',
+          },
           { title: 'Sindicatos', href: '/dashboard/company/unions', module: 'company.unions' },
-          { title: 'Convenios', href: '/dashboard/company/collective-agreements', module: 'company.collective-agreements' },
-          { title: 'Categorías', href: '/dashboard/company/job-categories', module: 'company.job-categories' },
+          {
+            title: 'Convenios',
+            href: '/dashboard/company/collective-agreements',
+            module: 'company.collective-agreements',
+          },
+          {
+            title: 'Categorías',
+            href: '/dashboard/company/job-categories',
+            module: 'company.job-categories',
+          },
         ],
       },
       {
         title: 'Equipos',
         icon: Truck,
         items: [
-          { title: 'Marcas', href: '/dashboard/company/vehicle-brands', module: 'company.vehicle-brands' },
-          { title: 'Tipos de Equipo', href: '/dashboard/company/vehicle-types', module: 'company.vehicle-types' },
-          { title: 'Titulares', href: '/dashboard/company/equipment-owners', module: 'company.equipment-owners' },
+          {
+            title: 'Marcas',
+            href: '/dashboard/company/vehicle-brands',
+            module: 'company.vehicle-brands',
+          },
+          {
+            title: 'Tipos de Equipo',
+            href: '/dashboard/company/vehicle-types',
+            module: 'company.vehicle-types',
+          },
+          {
+            title: 'Titulares',
+            href: '/dashboard/company/equipment-owners',
+            module: 'company.equipment-owners',
+          },
           { title: 'Sectores', href: '/dashboard/company/sectors', module: 'company.sectors' },
-          { title: 'Tipos Operativos', href: '/dashboard/company/type-operatives', module: 'company.type-operatives' },
-          { title: 'Contratistas', href: '/dashboard/company/contractors', module: 'company.contractors' },
+          {
+            title: 'Tipos Operativos',
+            href: '/dashboard/company/type-operatives',
+            module: 'company.type-operatives',
+          },
+          {
+            title: 'Contratistas',
+            href: '/dashboard/company/contractors',
+            module: 'company.contractors',
+          },
         ],
       },
       {
         title: 'Comercial',
         icon: Briefcase,
         items: [
-          { title: 'Clientes', href: '/dashboard/company/commercial/clients', module: 'commercial.clients' },
-          { title: 'Leads', href: '/dashboard/company/commercial/leads', module: 'commercial.leads' },
-          { title: 'Contactos', href: '/dashboard/company/commercial/contacts', module: 'commercial.contacts' },
-          { title: 'Presupuestos', href: '/dashboard/company/commercial/quotes', disabled: true, module: 'commercial.quotes' },
+          {
+            title: 'Clientes',
+            href: '/dashboard/company/commercial/clients',
+            module: 'commercial.clients',
+          },
+          {
+            title: 'Leads',
+            href: '/dashboard/company/commercial/leads',
+            module: 'commercial.leads',
+          },
+          {
+            title: 'Contactos',
+            href: '/dashboard/company/commercial/contacts',
+            module: 'commercial.contacts',
+          },
+          {
+            title: 'Presupuestos',
+            href: '/dashboard/company/commercial/quotes',
+            disabled: true,
+            module: 'commercial.quotes',
+          },
         ],
       },
       {
         title: 'Contabilidad',
         icon: Wallet,
         items: [
-          { title: 'Plan de Cuentas', href: '/dashboard/company/accounting/accounts', module: 'accounting.accounts' },
-          { title: 'Configuración', href: '/dashboard/company/accounting/settings', module: 'accounting.settings' },
+          {
+            title: 'Plan de Cuentas',
+            href: '/dashboard/company/accounting/accounts',
+            module: 'accounting.accounts',
+          },
+          {
+            title: 'Configuración',
+            href: '/dashboard/company/accounting/settings',
+            module: 'accounting.settings',
+          },
         ],
       },
     ],
@@ -269,9 +419,7 @@ export function _AppSidebar({
         items: item.items ? filterItems(item.items) : undefined,
         subGroups: item.subGroups ? filterSubGroups(item.subGroups) : undefined,
       }))
-      .filter(
-        (item) => (item.items?.length ?? 0) > 0 || (item.subGroups?.length ?? 0) > 0
-      );
+      .filter((item) => (item.items?.length ?? 0) > 0 || (item.subGroups?.length ?? 0) > 0);
   };
 
   // Aplicar filtros
@@ -346,7 +494,11 @@ export function _AppSidebar({
                             <span>{item.title}</span>
                           </SidebarMenuButton>
                         ) : (
-                          <SidebarMenuButton asChild tooltip={item.title} isActive={item.href ? isActive(item.href) : false}>
+                          <SidebarMenuButton
+                            asChild
+                            tooltip={item.title}
+                            isActive={item.href ? isActive(item.href) : false}
+                          >
                             <Link href={item.href!}>
                               {item.icon && <item.icon className="size-4" />}
                               <span>{item.title}</span>
@@ -368,84 +520,84 @@ export function _AppSidebar({
             <SidebarGroupLabel>Configuración</SidebarGroupLabel>
             <SidebarMenu>
               {filteredNavConfig.map((item) => (
-              <Collapsible
-                key={item.title}
-                asChild
-                defaultOpen={
-                  (item.items && hasActiveSubItem(item.items)) ||
-                  (item.subGroups && hasActiveInSubGroups(item.subGroups))
-                }
-                className="group/collapsible"
-              >
-                <SidebarMenuItem>
-                  <CollapsibleTrigger asChild>
-                    <SidebarMenuButton tooltip={item.title}>
-                      {item.icon && <item.icon className="size-4" />}
-                      <span>{item.title}</span>
-                      <ChevronRight className="ml-auto size-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                    </SidebarMenuButton>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <SidebarMenuSub>
-                      {/* Renderizar items simples */}
-                      {item.items?.map((subItem) => (
-                        <SidebarMenuSubItem key={subItem.href}>
-                          {subItem.disabled ? (
-                            <span className="flex h-7 min-w-0 items-center gap-2 overflow-hidden rounded-md px-2 text-sidebar-foreground opacity-50 cursor-not-allowed text-sm">
-                              {subItem.title}
-                            </span>
-                          ) : (
-                            <SidebarMenuSubButton asChild isActive={isActive(subItem.href)}>
-                              <Link href={subItem.href}>
-                                <span>{subItem.title}</span>
-                              </Link>
-                            </SidebarMenuSubButton>
-                          )}
-                        </SidebarMenuSubItem>
-                      ))}
-
-                      {/* Renderizar subgrupos colapsables */}
-                      {item.subGroups?.map((subGroup) => (
-                        <Collapsible
-                          key={subGroup.title}
-                          asChild
-                          defaultOpen={hasActiveInSubGroup(subGroup)}
-                          className="group/subgroup"
-                        >
-                          <SidebarMenuSubItem>
-                            <CollapsibleTrigger asChild>
-                              <SidebarMenuSubButton className="cursor-pointer font-medium">
-                                <subGroup.icon className="size-3.5" />
-                                <span>{subGroup.title}</span>
-                                <ChevronRight className="ml-auto size-3 transition-transform duration-200 group-data-[state=open]/subgroup:rotate-90" />
+                <Collapsible
+                  key={item.title}
+                  asChild
+                  defaultOpen={
+                    (item.items && hasActiveSubItem(item.items)) ||
+                    (item.subGroups && hasActiveInSubGroups(item.subGroups))
+                  }
+                  className="group/collapsible"
+                >
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton tooltip={item.title}>
+                        {item.icon && <item.icon className="size-4" />}
+                        <span>{item.title}</span>
+                        <ChevronRight className="ml-auto size-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        {/* Renderizar items simples */}
+                        {item.items?.map((subItem) => (
+                          <SidebarMenuSubItem key={subItem.href}>
+                            {subItem.disabled ? (
+                              <span className="flex h-7 min-w-0 items-center gap-2 overflow-hidden rounded-md px-2 text-sidebar-foreground opacity-50 cursor-not-allowed text-sm">
+                                {subItem.title}
+                              </span>
+                            ) : (
+                              <SidebarMenuSubButton asChild isActive={isActive(subItem.href)}>
+                                <Link href={subItem.href}>
+                                  <span>{subItem.title}</span>
+                                </Link>
                               </SidebarMenuSubButton>
-                            </CollapsibleTrigger>
-                            <CollapsibleContent>
-                              <div className="ml-4 border-l pl-2 mt-1 space-y-0.5">
-                                {subGroup.items.map((subGroupItem) => (
-                                  <SidebarMenuSubButton
-                                    key={subGroupItem.href}
-                                    asChild
-                                    isActive={isActive(subGroupItem.href)}
-                                    className="h-7"
-                                  >
-                                    <Link href={subGroupItem.href}>
-                                      <span className="text-xs">{subGroupItem.title}</span>
-                                    </Link>
-                                  </SidebarMenuSubButton>
-                                ))}
-                              </div>
-                            </CollapsibleContent>
+                            )}
                           </SidebarMenuSubItem>
-                        </Collapsible>
-                      ))}
-                    </SidebarMenuSub>
-                  </CollapsibleContent>
-                </SidebarMenuItem>
-              </Collapsible>
-            ))}
-          </SidebarMenu>
-        </SidebarGroup>
+                        ))}
+
+                        {/* Renderizar subgrupos colapsables */}
+                        {item.subGroups?.map((subGroup) => (
+                          <Collapsible
+                            key={subGroup.title}
+                            asChild
+                            defaultOpen={hasActiveInSubGroup(subGroup)}
+                            className="group/subgroup"
+                          >
+                            <SidebarMenuSubItem>
+                              <CollapsibleTrigger asChild>
+                                <SidebarMenuSubButton className="cursor-pointer font-medium">
+                                  <subGroup.icon className="size-3.5" />
+                                  <span>{subGroup.title}</span>
+                                  <ChevronRight className="ml-auto size-3 transition-transform duration-200 group-data-[state=open]/subgroup:rotate-90" />
+                                </SidebarMenuSubButton>
+                              </CollapsibleTrigger>
+                              <CollapsibleContent>
+                                <div className="ml-4 border-l pl-2 mt-1 space-y-0.5">
+                                  {subGroup.items.map((subGroupItem) => (
+                                    <SidebarMenuSubButton
+                                      key={subGroupItem.href}
+                                      asChild
+                                      isActive={isActive(subGroupItem.href)}
+                                      className="h-7"
+                                    >
+                                      <Link href={subGroupItem.href}>
+                                        <span className="text-xs">{subGroupItem.title}</span>
+                                      </Link>
+                                    </SidebarMenuSubButton>
+                                  ))}
+                                </div>
+                              </CollapsibleContent>
+                            </SidebarMenuSubItem>
+                          </Collapsible>
+                        ))}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </SidebarMenuItem>
+                </Collapsible>
+              ))}
+            </SidebarMenu>
+          </SidebarGroup>
         )}
 
         {/* Secondary Navigation */}

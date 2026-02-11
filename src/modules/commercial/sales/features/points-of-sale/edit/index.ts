@@ -1,0 +1,1 @@
+export { EditPointOfSale } from './EditPointOfSale';
