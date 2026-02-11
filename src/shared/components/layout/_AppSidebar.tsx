@@ -147,6 +147,11 @@ const navMain: NavItemWithSub[] = [
         href: '/dashboard/commercial/invoices',
         module: 'commercial.invoices',
       },
+      {
+        title: 'Reportes de Ventas',
+        href: '/dashboard/commercial/reports',
+        module: 'commercial',
+      },
     ],
   },
   {

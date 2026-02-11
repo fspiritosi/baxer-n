@@ -1,0 +1,431 @@
+'use client';
+
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
+import { Badge } from '@/shared/components/ui/badge';
+import moment from 'moment';
+import { VOUCHER_TYPE_LABELS, INVOICE_STATUS_LABELS } from '../../invoices/shared/validators';
+import { customerTaxConditionLabels } from '@/shared/utils/mappers';
+
+// Tipo de datos por período
+interface SalesByPeriodData {
+  invoices: Array<{
+    id: string;
+    fullNumber: string;
+    voucherType: string;
+    issueDate: Date;
+    subtotal: any;
+    vatAmount: any;
+    total: any;
+    status: string;
+    customer: { name: string };
+  }>;
+  totals: {
+    subtotal: number;
+    vatAmount: number;
+    total: number;
+    count: number;
+  };
+}
+
+// Tipo de datos por cliente
+interface SalesByCustomerData {
+  salesByCustomer: Array<{
+    customerId: string;
+    customerName: string;
+    taxId: string | null;
+    invoiceCount: number;
+    subtotal: number;
+    vatAmount: number;
+    total: number;
+  }>;
+  totals: {
+    subtotal: number;
+    vatAmount: number;
+    total: number;
+    customerCount: number;
+  };
+}
+
+// Tipo de datos por producto
+interface SalesByProductData {
+  salesByProduct: Array<{
+    productId: string;
+    productCode: string;
+    productName: string;
+    unitOfMeasure: string;
+    quantity: number;
+    subtotal: number;
+    vatAmount: number;
+    total: number;
+  }>;
+  totals: {
+    subtotal: number;
+    vatAmount: number;
+    total: number;
+    productCount: number;
+  };
+}
+
+// Tipo de datos libro IVA
+interface VATSalesBookData {
+  vatBook: Array<{
+    id: string;
+    fullNumber: string;
+    voucherType: string;
+    issueDate: Date;
+    customerName: string;
+    customerTaxId: string | null;
+    customerTaxCondition: string;
+    subtotal: number;
+    vatAmount: number;
+    total: number;
+    cae: string | null;
+    vatByRate: Array<{
+      rate: number;
+      base: number;
+      amount: number;
+    }>;
+  }>;
+  totals: {
+    subtotal: number;
+    vatAmount: number;
+    total: number;
+    invoiceCount: number;
+  };
+  vatSummary: Array<{
+    rate: number;
+    base: number;
+    amount: number;
+  }>;
+}
+
+type ReportData =
+  | SalesByPeriodData
+  | SalesByCustomerData
+  | SalesByProductData
+  | VATSalesBookData
+  | null;
+
+interface Props {
+  reportType: 'period' | 'customer' | 'product' | 'vat' | null;
+  data: ReportData;
+  startDate?: Date;
+  endDate?: Date;
+}
+
+export function _SalesReportTable({ reportType, data, startDate, endDate }: Props) {
+  if (!data || !reportType) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <p className="text-center text-muted-foreground">
+            Selecciona un tipo de reporte y genera para ver los resultados
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const renderPeriodReport = (data: SalesByPeriodData) => (
+    <Card>
+      <CardHeader>
+        <CardTitle>Ventas por Período</CardTitle>
+        <CardDescription>
+          {startDate && endDate && (
+            <>
+              {moment(startDate).format('DD/MM/YYYY')} - {moment(endDate).format('DD/MM/YYYY')}
+            </>
+          )}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="border-b">
+              <tr className="text-left">
+                <th className="pb-3">Fecha</th>
+                <th className="pb-3">Nro. Comprobante</th>
+                <th className="pb-3">Tipo</th>
+                <th className="pb-3">Cliente</th>
+                <th className="pb-3 text-right">Subtotal</th>
+                <th className="pb-3 text-right">IVA</th>
+                <th className="pb-3 text-right">Total</th>
+                <th className="pb-3">Estado</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {data.invoices.map((inv) => (
+                <tr key={inv.id}>
+                  <td className="py-3">{moment(inv.issueDate).format('DD/MM/YYYY')}</td>
+                  <td className="py-3 font-mono">{inv.fullNumber}</td>
+                  <td className="py-3">
+                    {VOUCHER_TYPE_LABELS[inv.voucherType as keyof typeof VOUCHER_TYPE_LABELS]}
+                  </td>
+                  <td className="py-3">{inv.customer.name}</td>
+                  <td className="py-3 text-right font-mono">
+                    ${Number(inv.subtotal).toFixed(2)}
+                  </td>
+                  <td className="py-3 text-right font-mono">
+                    ${Number(inv.vatAmount).toFixed(2)}
+                  </td>
+                  <td className="py-3 text-right font-mono font-semibold">
+                    ${Number(inv.total).toFixed(2)}
+                  </td>
+                  <td className="py-3">
+                    <Badge variant="outline">
+                      {INVOICE_STATUS_LABELS[inv.status as keyof typeof INVOICE_STATUS_LABELS]}
+                    </Badge>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="border-t-2 font-semibold">
+              <tr>
+                <td className="pt-3" colSpan={4}>
+                  TOTALES ({data.totals.count} facturas)
+                </td>
+                <td className="pt-3 text-right">${data.totals.subtotal.toFixed(2)}</td>
+                <td className="pt-3 text-right">${data.totals.vatAmount.toFixed(2)}</td>
+                <td className="pt-3 text-right">${data.totals.total.toFixed(2)}</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  const renderCustomerReport = (data: SalesByCustomerData) => (
+    <Card>
+      <CardHeader>
+        <CardTitle>Ventas por Cliente</CardTitle>
+        <CardDescription>
+          {startDate && endDate && (
+            <>
+              {moment(startDate).format('DD/MM/YYYY')} - {moment(endDate).format('DD/MM/YYYY')}
+            </>
+          )}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="border-b">
+              <tr className="text-left">
+                <th className="pb-3">Cliente</th>
+                <th className="pb-3">CUIT</th>
+                <th className="pb-3 text-right">Cant. Facturas</th>
+                <th className="pb-3 text-right">Subtotal</th>
+                <th className="pb-3 text-right">IVA</th>
+                <th className="pb-3 text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {data.salesByCustomer.map((customer) => (
+                <tr key={customer.customerId}>
+                  <td className="py-3">{customer.customerName}</td>
+                  <td className="py-3 font-mono">{customer.taxId || '-'}</td>
+                  <td className="py-3 text-right">{customer.invoiceCount}</td>
+                  <td className="py-3 text-right font-mono">
+                    ${customer.subtotal.toFixed(2)}
+                  </td>
+                  <td className="py-3 text-right font-mono">${customer.vatAmount.toFixed(2)}</td>
+                  <td className="py-3 text-right font-mono font-semibold">
+                    ${customer.total.toFixed(2)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="border-t-2 font-semibold">
+              <tr>
+                <td className="pt-3" colSpan={3}>
+                  TOTALES ({data.totals.customerCount} clientes)
+                </td>
+                <td className="pt-3 text-right">${data.totals.subtotal.toFixed(2)}</td>
+                <td className="pt-3 text-right">${data.totals.vatAmount.toFixed(2)}</td>
+                <td className="pt-3 text-right">${data.totals.total.toFixed(2)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  const renderProductReport = (data: SalesByProductData) => (
+    <Card>
+      <CardHeader>
+        <CardTitle>Ventas por Producto</CardTitle>
+        <CardDescription>
+          {startDate && endDate && (
+            <>
+              {moment(startDate).format('DD/MM/YYYY')} - {moment(endDate).format('DD/MM/YYYY')}
+            </>
+          )}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="border-b">
+              <tr className="text-left">
+                <th className="pb-3">Código</th>
+                <th className="pb-3">Producto</th>
+                <th className="pb-3 text-right">Cantidad</th>
+                <th className="pb-3">UM</th>
+                <th className="pb-3 text-right">Subtotal</th>
+                <th className="pb-3 text-right">IVA</th>
+                <th className="pb-3 text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {data.salesByProduct.map((product) => (
+                <tr key={product.productId}>
+                  <td className="py-3 font-mono">{product.productCode}</td>
+                  <td className="py-3">{product.productName}</td>
+                  <td className="py-3 text-right font-mono">{product.quantity.toFixed(3)}</td>
+                  <td className="py-3">{product.unitOfMeasure}</td>
+                  <td className="py-3 text-right font-mono">${product.subtotal.toFixed(2)}</td>
+                  <td className="py-3 text-right font-mono">${product.vatAmount.toFixed(2)}</td>
+                  <td className="py-3 text-right font-mono font-semibold">
+                    ${product.total.toFixed(2)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="border-t-2 font-semibold">
+              <tr>
+                <td className="pt-3" colSpan={4}>
+                  TOTALES ({data.totals.productCount} productos)
+                </td>
+                <td className="pt-3 text-right">${data.totals.subtotal.toFixed(2)}</td>
+                <td className="pt-3 text-right">${data.totals.vatAmount.toFixed(2)}</td>
+                <td className="pt-3 text-right">${data.totals.total.toFixed(2)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  const renderVATReport = (data: VATSalesBookData) => (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Libro IVA Ventas</CardTitle>
+          <CardDescription>
+            {startDate && endDate && (
+              <>
+                {moment(startDate).format('DD/MM/YYYY')} - {moment(endDate).format('DD/MM/YYYY')}
+              </>
+            )}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b">
+                <tr className="text-left">
+                  <th className="pb-3">Fecha</th>
+                  <th className="pb-3">Comprobante</th>
+                  <th className="pb-3">Cliente</th>
+                  <th className="pb-3">CUIT</th>
+                  <th className="pb-3">Cond. IVA</th>
+                  <th className="pb-3 text-right">Neto</th>
+                  <th className="pb-3 text-right">IVA</th>
+                  <th className="pb-3 text-right">Total</th>
+                  <th className="pb-3">CAE</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {data.vatBook.map((inv) => (
+                  <tr key={inv.id}>
+                    <td className="py-3">{moment(inv.issueDate).format('DD/MM/YYYY')}</td>
+                    <td className="py-3 font-mono text-xs">{inv.fullNumber}</td>
+                    <td className="py-3">{inv.customerName}</td>
+                    <td className="py-3 font-mono text-xs">{inv.customerTaxId || '-'}</td>
+                    <td className="py-3 text-xs">
+                      {customerTaxConditionLabels[inv.customerTaxCondition as keyof typeof customerTaxConditionLabels] || inv.customerTaxCondition}
+                    </td>
+                    <td className="py-3 text-right font-mono">${inv.subtotal.toFixed(2)}</td>
+                    <td className="py-3 text-right font-mono">${inv.vatAmount.toFixed(2)}</td>
+                    <td className="py-3 text-right font-mono font-semibold">
+                      ${inv.total.toFixed(2)}
+                    </td>
+                    <td className="py-3 font-mono text-xs">{inv.cae || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="border-t-2 font-semibold">
+                <tr>
+                  <td className="pt-3" colSpan={5}>
+                    TOTALES ({data.totals.invoiceCount} facturas)
+                  </td>
+                  <td className="pt-3 text-right">${data.totals.subtotal.toFixed(2)}</td>
+                  <td className="pt-3 text-right">${data.totals.vatAmount.toFixed(2)}</td>
+                  <td className="pt-3 text-right">${data.totals.total.toFixed(2)}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Resumen por alícuota */}
+      {data.vatSummary.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Resumen IVA por Alícuota</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <table className="w-full text-sm">
+              <thead className="border-b">
+                <tr className="text-left">
+                  <th className="pb-3">Alícuota</th>
+                  <th className="pb-3 text-right">Base Imponible</th>
+                  <th className="pb-3 text-right">Impuesto</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {data.vatSummary.map((vat) => (
+                  <tr key={vat.rate}>
+                    <td className="py-3 font-semibold">{vat.rate}%</td>
+                    <td className="py-3 text-right font-mono">${vat.base.toFixed(2)}</td>
+                    <td className="py-3 text-right font-mono">${vat.amount.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="border-t-2 font-semibold">
+                <tr>
+                  <td className="pt-3">TOTAL</td>
+                  <td className="pt-3 text-right">
+                    ${data.vatSummary.reduce((sum, v) => sum + v.base, 0).toFixed(2)}
+                  </td>
+                  <td className="pt-3 text-right">
+                    ${data.vatSummary.reduce((sum, v) => sum + v.amount, 0).toFixed(2)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </CardContent>
+        </Card>
+      )}
+    </>
+  );
+
+  switch (reportType) {
+    case 'period':
+      return renderPeriodReport(data as SalesByPeriodData);
+    case 'customer':
+      return renderCustomerReport(data as SalesByCustomerData);
+    case 'product':
+      return renderProductReport(data as SalesByProductData);
+    case 'vat':
+      return renderVATReport(data as VATSalesBookData);
+    default:
+      return null;
+  }
+}

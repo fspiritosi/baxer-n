@@ -2,7 +2,7 @@ import { getInvoiceById } from '../list/actions.server';
 import { Card } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Download } from 'lucide-react';
 import Link from 'next/link';
 import moment from 'moment';
 import { VOUCHER_TYPE_LABELS, INVOICE_STATUS_LABELS } from '../shared/validators';
@@ -56,8 +56,11 @@ export async function InvoiceDetail({ id }: InvoiceDetailProps) {
         </div>
 
         <div className="flex gap-2">
-          <Button variant="outline" disabled>
-            Descargar PDF
+          <Button variant="outline" asChild>
+            <a href={`/api/invoices/${invoice.id}/pdf`} target="_blank" rel="noopener noreferrer">
+              <Download className="mr-2 h-4 w-4" />
+              Descargar PDF
+            </a>
           </Button>
           {invoice.status === 'DRAFT' && (
             <Button variant="outline" disabled>
