@@ -27,9 +27,10 @@ interface PurchaseInvoicesTableProps {
     data: PurchaseInvoiceListItem[];
     total: number;
   };
+  searchParams?: Record<string, string | string[] | undefined>;
 }
 
-export function _PurchaseInvoicesTable({ initialData }: PurchaseInvoicesTableProps) {
+export function _PurchaseInvoicesTable({ initialData, searchParams }: PurchaseInvoicesTableProps) {
   const router = useRouter();
   const [loading, setLoading] = useState<string | null>(null);
 
@@ -224,8 +225,9 @@ export function _PurchaseInvoicesTable({ initialData }: PurchaseInvoicesTablePro
   return (
     <DataTable
       columns={columns}
-      initialData={initialData.data}
-      initialTotal={initialData.total}
+      data={initialData.data}
+      totalRows={initialData.total}
+      searchParams={searchParams}
       searchPlaceholder="Buscar facturas..."
     />
   );

@@ -74,8 +74,16 @@ export async function getPurchaseInvoicesPaginated(searchParams: DataTableSearch
     return { data, total };
   } catch (error) {
     logger.error('Error al obtener facturas de compra', {
-      data: { error, companyId },
+      data: {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        companyId
+      },
     });
+    // Re-throw the original error to see the details
+    if (error instanceof Error) {
+      throw error;
+    }
     throw new Error('Error al obtener facturas de compra');
   }
 }
