@@ -32,6 +32,14 @@ export async function saveAccountingSettings(
   input: {
     fiscalYearStart: Date;
     fiscalYearEnd: Date;
+    salesAccountId?: string | null;
+    purchasesAccountId?: string | null;
+    receivablesAccountId?: string | null;
+    payablesAccountId?: string | null;
+    vatDebitAccountId?: string | null;
+    vatCreditAccountId?: string | null;
+    defaultCashAccountId?: string | null;
+    defaultBankAccountId?: string | null;
   }
 ) {
   const { userId } = await auth();
@@ -64,6 +72,38 @@ export async function saveAccountingSettings(
     return settings;
   } catch (error) {
     logger.error('Error al guardar configuración contable', { data: { error, companyId, userId } });
+    throw error;
+  }
+}
+
+/**
+ * Obtiene todas las cuentas activas de la empresa para los selectores
+ */
+export async function getActiveAccounts(companyId: string) {
+  const { userId } = await auth();
+  if (!userId) throw new Error('No autenticado');
+
+  try {
+    const accounts = await prisma.account.findMany({
+      where: {
+        companyId,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        type: true,
+        nature: true,
+      },
+      orderBy: {
+        code: 'asc',
+      },
+    });
+
+    return accounts;
+  } catch (error) {
+    logger.error('Error al obtener cuentas', { data: { error, companyId, userId } });
     throw error;
   }
 }

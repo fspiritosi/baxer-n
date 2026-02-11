@@ -8,6 +8,7 @@ import { revalidatePath } from 'next/cache';
 import { Prisma } from '@/generated/prisma/client';
 import type { CreateReceiptFormData } from '../../shared/validators';
 import type { PendingInvoice, ReceiptListItem, ReceiptWithDetails } from '../../shared/types';
+import { createJournalEntryForReceipt } from '@/modules/accounting/features/integrations/commercial';
 
 /**
  * Obtiene las facturas pendientes de cobro de un cliente
@@ -282,6 +283,28 @@ export async function confirmReceipt(receiptId: string) {
             });
           }
         }
+      }
+
+      // Crear asiento contable automáticamente
+      try {
+        const journalEntryId = await createJournalEntryForReceipt(receiptId, companyId, tx);
+
+        if (journalEntryId) {
+          // Actualizar recibo con referencia al asiento contable
+          await tx.receipt.update({
+            where: { id: receiptId },
+            data: { journalEntryId },
+          });
+
+          logger.info('Asiento contable generado para recibo de cobro', {
+            data: { receiptId, journalEntryId },
+          });
+        }
+      } catch (error) {
+        logger.warn('No se pudo generar asiento contable para recibo', {
+          data: { receiptId, error },
+        });
+        // No lanzar error para no interrumpir la confirmación del recibo
       }
     });
 

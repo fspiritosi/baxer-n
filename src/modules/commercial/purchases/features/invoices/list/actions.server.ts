@@ -13,6 +13,7 @@ import {
 } from '@/shared/components/common/DataTable/helpers';
 import type { PurchaseInvoiceFormInput } from '../shared/validators';
 import type { VoucherType } from '@/generated/prisma/enums';
+import { createJournalEntryForPurchaseInvoice } from '@/modules/accounting/features/integrations/commercial';
 
 // ============================================
 // QUERIES
@@ -443,6 +444,28 @@ export async function confirmPurchaseInvoice(id: string) {
             createdBy: userId,
           },
         });
+      }
+
+      // Crear asiento contable automáticamente
+      try {
+        const journalEntryId = await createJournalEntryForPurchaseInvoice(id, companyId, tx);
+
+        if (journalEntryId) {
+          // Actualizar factura con referencia al asiento contable
+          await tx.purchaseInvoice.update({
+            where: { id },
+            data: { journalEntryId },
+          });
+
+          logger.info('Asiento contable generado para factura de compra', {
+            data: { invoiceId: id, journalEntryId },
+          });
+        }
+      } catch (error) {
+        logger.warn('No se pudo generar asiento contable para factura de compra', {
+          data: { invoiceId: id, error },
+        });
+        // No lanzar error para no interrumpir la confirmación de la factura
       }
 
       return updatedInvoice;

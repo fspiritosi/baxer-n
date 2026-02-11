@@ -8,6 +8,7 @@ import { revalidatePath } from 'next/cache';
 import { Prisma } from '@/generated/prisma/client';
 import type { CreatePaymentOrderFormData } from '../../shared/validators';
 import type { PendingPurchaseInvoice, PaymentOrderListItem, PaymentOrderWithDetails } from '../../shared/types';
+import { createJournalEntryForPaymentOrder } from '@/modules/accounting/features/integrations/commercial';
 
 /**
  * Obtiene las facturas pendientes de pago de un proveedor
@@ -282,6 +283,28 @@ export async function confirmPaymentOrder(paymentOrderId: string) {
             });
           }
         }
+      }
+
+      // Crear asiento contable automáticamente
+      try {
+        const journalEntryId = await createJournalEntryForPaymentOrder(paymentOrderId, companyId, tx);
+
+        if (journalEntryId) {
+          // Actualizar orden de pago con referencia al asiento contable
+          await tx.paymentOrder.update({
+            where: { id: paymentOrderId },
+            data: { journalEntryId },
+          });
+
+          logger.info('Asiento contable generado para orden de pago', {
+            data: { paymentOrderId, journalEntryId },
+          });
+        }
+      } catch (error) {
+        logger.warn('No se pudo generar asiento contable para orden de pago', {
+          data: { paymentOrderId, error },
+        });
+        // No lanzar error para no interrumpir la confirmación de la orden
       }
     });
 

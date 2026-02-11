@@ -208,6 +208,17 @@ model Account {
   suppliers   Supplier[]     // Relación con proveedores (para cuentas predeterminadas)
   contractors Contractor[]   // Relación con clientes/contratistas (para cuentas predeterminadas)
   bankAccounts BankAccount[]  // Relación con cuentas bancarias (para cuentas contables)
+  cashRegisters CashRegister[] // Relación con cajas (para cuentas contables)
+
+  // Relaciones inversas para AccountingSettings (many-to-one)
+  settingsAsSalesAccount        AccountingSettings[] @relation("SalesAccount")
+  settingsAsPurchasesAccount    AccountingSettings[] @relation("PurchasesAccount")
+  settingsAsReceivablesAccount  AccountingSettings[] @relation("ReceivablesAccount")
+  settingsAsPayablesAccount     AccountingSettings[] @relation("PayablesAccount")
+  settingsAsVatDebitAccount     AccountingSettings[] @relation("VatDebitAccount")
+  settingsAsVatCreditAccount    AccountingSettings[] @relation("VatCreditAccount")
+  settingsAsDefaultCashAccount  AccountingSettings[] @relation("DefaultCashAccount")
+  settingsAsDefaultBankAccount  AccountingSettings[] @relation("DefaultBankAccount")
 
   @@unique([companyId, code])
   @@map("accounts")
@@ -270,9 +281,29 @@ model AccountingSettings {
   fiscalYearStart   DateTime @map("fiscal_year_start")
   fiscalYearEnd     DateTime @map("fiscal_year_end")
   lastEntryNumber   Int      @default(0) @map("last_entry_number")
-  company           Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Cuentas por defecto para integración con módulo comercial
+  salesAccountId          String? @map("sales_account_id") @db.Uuid          // Ventas (ingreso)
+  purchasesAccountId      String? @map("purchases_account_id") @db.Uuid      // Compras (gasto)
+  receivablesAccountId    String? @map("receivables_account_id") @db.Uuid    // Cuentas por Cobrar
+  payablesAccountId       String? @map("payables_account_id") @db.Uuid       // Cuentas por Pagar
+  vatDebitAccountId       String? @map("vat_debit_account_id") @db.Uuid      // IVA Débito Fiscal (ventas)
+  vatCreditAccountId      String? @map("vat_credit_account_id") @db.Uuid     // IVA Crédito Fiscal (compras)
+  defaultCashAccountId    String? @map("default_cash_account_id") @db.Uuid   // Caja por defecto
+  defaultBankAccountId    String? @map("default_bank_account_id") @db.Uuid   // Banco por defecto
+
+  company                 Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  salesAccount            Account?        @relation("SalesAccount", fields: [salesAccountId], references: [id])
+  purchasesAccount        Account?        @relation("PurchasesAccount", fields: [purchasesAccountId], references: [id])
+  receivablesAccount      Account?        @relation("ReceivablesAccount", fields: [receivablesAccountId], references: [id])
+  payablesAccount         Account?        @relation("PayablesAccount", fields: [payablesAccountId], references: [id])
+  vatDebitAccount         Account?        @relation("VatDebitAccount", fields: [vatDebitAccountId], references: [id])
+  vatCreditAccount        Account?        @relation("VatCreditAccount", fields: [vatCreditAccountId], references: [id])
+  defaultCashAccount      Account?        @relation("DefaultCashAccount", fields: [defaultCashAccountId], references: [id])
+  defaultBankAccount      Account?        @relation("DefaultBankAccount", fields: [defaultBankAccountId], references: [id])
+
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
 
   @@map("accounting_settings")
 }
@@ -2124,9 +2155,13 @@ model CashRegister {
   status            CashRegisterStatus    @default(ACTIVE)
   isDefault         Boolean               @default(false) @map("is_default")
 
+  // Relación con contabilidad
+  accountId         String?               @map("account_id") @db.Uuid
+
   // Relaciones
   companyId         String                @map("company_id") @db.Uuid
   company           Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  account           Account?              @relation(fields: [accountId], references: [id])
   sessions          CashRegisterSession[]
   movements         CashMovement[]
   receiptPayments   ReceiptPayment[]

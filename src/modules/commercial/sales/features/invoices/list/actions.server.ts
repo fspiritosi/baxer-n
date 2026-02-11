@@ -11,6 +11,7 @@ import {
   validateVoucherType,
   mapTaxStatusToCustomerTaxCondition,
 } from '../shared/afip-validation';
+import { createJournalEntryForSalesInvoice } from '@/modules/accounting/features/integrations/commercial';
 
 // Obtener todas las facturas de venta
 export async function getInvoices() {
@@ -474,6 +475,28 @@ export async function confirmInvoice(id: string) {
             },
           });
         }
+      }
+
+      // Crear asiento contable automáticamente
+      try {
+        const journalEntryId = await createJournalEntryForSalesInvoice(id, companyId, tx);
+
+        if (journalEntryId) {
+          // Actualizar factura con referencia al asiento contable
+          await tx.salesInvoice.update({
+            where: { id: id },
+            data: { journalEntryId },
+          });
+
+          logger.info('Asiento contable generado para factura de venta', {
+            data: { invoiceId: id, journalEntryId },
+          });
+        }
+      } catch (error) {
+        logger.warn('No se pudo generar asiento contable para factura de venta', {
+          data: { invoiceId: id, error },
+        });
+        // No lanzar error para no interrumpir la confirmación de la factura
       }
 
       return updatedInvoice;

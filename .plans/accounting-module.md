@@ -376,6 +376,19 @@ Esta fase conecta el módulo de contabilidad con otros módulos del sistema para
 
 ## Posibles Mejoras Futuras
 
+### Importación/Exportación
+1. **Importar Plan de cuentas**
+   - Importar plan de cuentas desde archivo Excel/CSV
+   - Validación de estructura y coherencia
+   - Mapeo de cuentas existentes
+
+2. **Exportar Plan de cuentas**
+   - Darle el modelo vacio del plan de cuentas al usuario para que lo cargue, de esta manera aseguramos la coherencia.
+   - Agregar un botón para descargar el modelo vacío
+   - Agregar una Hoja (dentro del excel que se descarga) con las instrucciones de cómo cargar el plan de cuentas.
+   - Exportar plan de cuentas a archivo Excel/CSV
+   - Formato compatible con Excel/CSV
+
 ### Mejoras de UI/UX
 1. **Filtros Avanzados en Reportes**
    - Filtrar por tipo de cuenta en todos los informes
