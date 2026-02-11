@@ -1,0 +1,77 @@
+import { z } from 'zod';
+import { ProductType, ProductStatus } from '@/generated/prisma/enums';
+
+// ============================================
+// Category Validators
+// ============================================
+
+export const createCategorySchema = z.object({
+  name: z.string().min(1, 'El nombre es requerido').max(100),
+  description: z.string().max(500).optional(),
+  parentId: z.string().uuid().optional(),
+});
+
+export const updateCategorySchema = createCategorySchema.partial();
+
+export type CreateCategoryFormData = z.infer<typeof createCategorySchema>;
+export type UpdateCategoryFormData = z.infer<typeof updateCategorySchema>;
+
+// ============================================
+// Product Validators
+// ============================================
+
+export const createProductSchema = z.object({
+  name: z.string().min(1, 'El nombre es requerido').max(200),
+  description: z.string().max(1000).optional(),
+  type: z.nativeEnum(ProductType),
+  categoryId: z.string().uuid().optional(),
+  unitOfMeasure: z.string().max(20).optional(),
+  costPrice: z.coerce.number().min(0, 'El precio de costo debe ser mayor o igual a 0'),
+  salePrice: z.coerce.number().min(0, 'El precio de venta debe ser mayor o igual a 0'),
+  vatRate: z.coerce.number().min(0).max(100).optional(),
+  trackStock: z.boolean().optional(),
+  minStock: z.coerce.number().min(0).optional().or(z.literal('')),
+  maxStock: z.coerce.number().min(0).optional().or(z.literal('')),
+  barcode: z.string().max(50).optional(),
+  internalCode: z.string().max(50).optional(),
+  brand: z.string().max(100).optional(),
+  model: z.string().max(100).optional(),
+});
+
+export const updateProductSchema = createProductSchema.partial().extend({
+  status: z.nativeEnum(ProductStatus).optional(),
+});
+
+export type CreateProductFormData = z.infer<typeof createProductSchema>;
+export type UpdateProductFormData = z.infer<typeof updateProductSchema>;
+
+// ============================================
+// Price List Validators
+// ============================================
+
+export const createPriceListSchema = z.object({
+  name: z.string().min(1, 'El nombre es requerido').max(100),
+  description: z.string().max(500).optional(),
+  isDefault: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+});
+
+export const updatePriceListSchema = createPriceListSchema.partial();
+
+export const createPriceListItemSchema = z.object({
+  productId: z.string().uuid('Debe seleccionar un producto'),
+  price: z.coerce
+    .number({ invalid_type_error: 'El precio debe ser un número' })
+    .min(0, 'El precio debe ser mayor o igual a 0'),
+});
+
+export const updatePriceListItemSchema = z.object({
+  price: z.coerce
+    .number({ invalid_type_error: 'El precio debe ser un número' })
+    .min(0, 'El precio debe ser mayor o igual a 0'),
+});
+
+export type CreatePriceListFormData = z.infer<typeof createPriceListSchema>;
+export type UpdatePriceListFormData = z.infer<typeof updatePriceListSchema>;
+export type CreatePriceListItemFormData = z.infer<typeof createPriceListItemSchema>;
+export type UpdatePriceListItemFormData = z.infer<typeof updatePriceListItemSchema>;

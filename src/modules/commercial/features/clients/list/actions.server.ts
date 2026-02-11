@@ -46,6 +46,12 @@ export async function getClients(params: GetClientsParams = {}) {
           isActive: true,
           terminationDate: true,
           createdAt: true,
+          // Campos comerciales
+          taxCondition: true,
+          paymentTermDays: true,
+          creditLimit: true,
+          priceListId: true,
+          defaultAccountId: true,
           _count: {
             select: {
               vehicleAllocations: true,
@@ -60,6 +66,19 @@ export async function getClients(params: GetClientsParams = {}) {
               email: true,
               phone: true,
               position: true,
+            },
+          },
+          priceList: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          defaultAccount: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
             },
           },
         },
@@ -145,6 +164,12 @@ export interface CreateClientInput {
     phone?: string;
     position?: string;
   };
+  // Campos comerciales (opcionales)
+  taxCondition?: 'RESPONSABLE_INSCRIPTO' | 'MONOTRIBUTISTA' | 'EXENTO' | 'CONSUMIDOR_FINAL';
+  paymentTermDays?: number;
+  creditLimit?: number;
+  priceListId?: string;
+  defaultAccountId?: string;
 }
 
 /**
@@ -180,6 +205,12 @@ export async function createClient(input: CreateClientInput) {
         email: input.email || null,
         phone: input.phone || null,
         address: input.address || null,
+        // Campos comerciales
+        taxCondition: input.taxCondition,
+        paymentTermDays: input.paymentTermDays,
+        creditLimit: input.creditLimit,
+        priceListId: input.priceListId,
+        defaultAccountId: input.defaultAccountId,
         contact: contactData,
       },
       select: { id: true },
@@ -261,6 +292,12 @@ export async function updateClient(id: string, input: UpdateClientInput) {
         email: input.email || null,
         phone: input.phone || null,
         address: input.address || null,
+        // Campos comerciales
+        ...(input.taxCondition !== undefined && { taxCondition: input.taxCondition }),
+        ...(input.paymentTermDays !== undefined && { paymentTermDays: input.paymentTermDays }),
+        ...(input.creditLimit !== undefined && { creditLimit: input.creditLimit }),
+        ...(input.priceListId !== undefined && { priceListId: input.priceListId }),
+        ...(input.defaultAccountId !== undefined && { defaultAccountId: input.defaultAccountId }),
         contact: contactData,
       },
       select: { id: true },
