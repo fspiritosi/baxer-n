@@ -6,6 +6,7 @@
 import type {
   CostType,
   Currency,
+  CustomerTaxCondition,
   DocumentAppliesTo,
   DocumentState,
   EducationLevel,
@@ -41,6 +42,17 @@ export const identityDocumentTypeLabels: Record<IdentityDocumentType, string> = 
   LE: 'Libreta de Enrolamiento',
   LC: 'Libreta Cívica',
   PASSPORT: 'Pasaporte',
+};
+
+// ============================================
+// CONDICIÓN FRENTE AL IVA
+// ============================================
+
+export const customerTaxConditionLabels: Record<CustomerTaxCondition, string> = {
+  RESPONSABLE_INSCRIPTO: 'Responsable Inscripto',
+  MONOTRIBUTISTA: 'Monotributista',
+  EXENTO: 'Exento',
+  CONSUMIDOR_FINAL: 'Consumidor Final',
 };
 
 // ============================================

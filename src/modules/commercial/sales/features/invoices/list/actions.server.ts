@@ -7,6 +7,10 @@ import { getActiveCompanyId } from '@/shared/lib/company';
 import { createInvoiceSchema } from '../shared/validators';
 import { revalidatePath } from 'next/cache';
 import { Prisma } from '@/generated/prisma/client';
+import {
+  validateVoucherType,
+  mapTaxStatusToCustomerTaxCondition,
+} from '../shared/afip-validation';
 
 // Obtener todas las facturas de venta
 export async function getInvoices() {
@@ -222,10 +226,39 @@ export async function createInvoice(data: unknown) {
         id: validatedData.customerId,
         companyId: companyId,
       },
+      select: {
+        id: true,
+        name: true,
+        taxCondition: true,
+      },
     });
 
     if (!customer) {
       throw new Error('Cliente no encontrado');
+    }
+
+    // Obtener condición fiscal de la empresa (emisor)
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { taxStatus: true },
+    });
+
+    if (!company) {
+      throw new Error('Empresa no encontrada');
+    }
+
+    // Validar tipo de comprobante según AFIP
+    const emisorTaxCondition = mapTaxStatusToCustomerTaxCondition(company.taxStatus);
+    const receptorTaxCondition = customer.taxCondition;
+
+    const afipValidation = validateVoucherType(
+      emisorTaxCondition,
+      receptorTaxCondition,
+      validatedData.voucherType as any
+    );
+
+    if (!afipValidation.isValid) {
+      throw new Error(afipValidation.error);
     }
 
     // Obtener próximo número
@@ -469,6 +502,56 @@ export async function confirmInvoice(id: string) {
     }
 
     throw new Error('Error al confirmar la factura');
+  }
+}
+
+// Obtener tipos de comprobante permitidos según cliente seleccionado
+export async function getAllowedVoucherTypesForCustomer(customerId: string) {
+  const { userId: authUserId } = await auth();
+  if (!authUserId) throw new Error('No autenticado');
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    // Obtener condición fiscal del cliente
+    const customer = await prisma.contractor.findFirst({
+      where: {
+        id: customerId,
+        companyId: companyId,
+      },
+      select: {
+        taxCondition: true,
+      },
+    });
+
+    if (!customer) {
+      throw new Error('Cliente no encontrado');
+    }
+
+    // Obtener condición fiscal de la empresa
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { taxStatus: true },
+    });
+
+    if (!company) {
+      throw new Error('Empresa no encontrada');
+    }
+
+    // Mapear y obtener tipos permitidos
+    const emisorTaxCondition = mapTaxStatusToCustomerTaxCondition(company.taxStatus);
+    const receptorTaxCondition = customer.taxCondition;
+
+    const { getAllowedVoucherTypes } = await import('../shared/afip-validation');
+    const allowedTypes = getAllowedVoucherTypes(emisorTaxCondition, receptorTaxCondition);
+
+    return allowedTypes;
+  } catch (error) {
+    logger.error('Error al obtener tipos de comprobante permitidos', {
+      data: { customerId, companyId, error },
+    });
+    throw error;
   }
 }
 

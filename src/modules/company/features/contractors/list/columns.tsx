@@ -15,6 +15,7 @@ import {
 import { DataTableColumnHeader } from '@/shared/components/common/DataTable';
 import type { ModulePermissions } from '@/shared/lib/permissions';
 import type { ContractorListItem } from './actions.server';
+import { customerTaxConditionLabels } from '@/shared/utils/mappers';
 
 interface ColumnsProps {
   onEdit: (contractor: ContractorListItem) => void;
@@ -45,6 +46,18 @@ export function getColumns({ onEdit, onDelete, permissions }: ColumnsProps): Col
       cell: ({ row }) => (
         <span data-testid={`contractor-taxId-${row.original.id}`}>
           {row.getValue('taxId') || '-'}
+        </span>
+      ),
+    },
+
+    // Condición IVA
+    {
+      accessorKey: 'taxCondition',
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Condición IVA" />,
+      meta: { title: 'Condición IVA' },
+      cell: ({ row }) => (
+        <span data-testid={`contractor-taxCondition-${row.original.id}`}>
+          {customerTaxConditionLabels[row.getValue('taxCondition')]}
         </span>
       ),
     },

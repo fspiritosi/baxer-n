@@ -1374,4 +1374,11 @@ Integración con Contabilidad ← depende de todo lo anterior
 
 ---
 
+## 11. Ajustes
+
+- Revisar Clientes, no esta el campo de Condición frente al IVA.
+- Revisar la lógica de las facturas de venta, en /docs/rules-system.md podes encontrar la lógica de que facturas puede emitir una empresa dependiendo de su condición frente al IVA.
+- No encontré en la UI donde puede cargar movimientos de entrada/salida/entre almacenes de los productos, creo que faltan crear los formularios.
+ 
+
 **Listo para comenzar la implementación del Módulo Comercial 🚀**

@@ -3,11 +3,13 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { _ReportsSelector } from './_ReportsSelector';
 import { _TrialBalanceReport } from './_TrialBalanceReport';
+import { _BalanceSheetReport } from './_BalanceSheetReport';
+import { _IncomeStatementReport } from './_IncomeStatementReport';
 import { _JournalBookReport } from './_JournalBookReport';
 import { _GeneralLedgerReport } from './_GeneralLedgerReport';
 import { useState } from 'react';
 
-type ReportType = 'trial-balance' | 'journal-book' | 'general-ledger';
+type ReportType = 'trial-balance' | 'journal-book' | 'general-ledger' | 'balance-sheet' | 'income-statement';
 
 interface ReportsContentProps {
   companyId: string;
@@ -42,6 +44,14 @@ export function _ReportsContent({ companyId }: ReportsContentProps) {
 
       {selectedReport === 'trial-balance' && (
         <_TrialBalanceReport companyId={companyId} />
+      )}
+
+      {selectedReport === 'balance-sheet' && (
+        <_BalanceSheetReport companyId={companyId} />
+      )}
+
+      {selectedReport === 'income-statement' && (
+        <_IncomeStatementReport companyId={companyId} />
       )}
 
       {selectedReport === 'journal-book' && (

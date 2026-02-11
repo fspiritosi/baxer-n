@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
@@ -19,8 +19,17 @@ import {
 } from '@/shared/components/ui/dialog';
 import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/shared/components/ui/select';
 
 import { createContractor, type ContractorListItem, updateContractor } from '../actions.server';
+import { CustomerTaxCondition } from '@/generated/prisma/enums';
+import { customerTaxConditionLabels } from '@/shared/utils/mappers';
 
 // ============================================
 // SCHEMA
@@ -29,6 +38,9 @@ import { createContractor, type ContractorListItem, updateContractor } from '../
 const contractorSchema = z.object({
   name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
   taxId: z.string().optional(),
+  taxCondition: z.nativeEnum(CustomerTaxCondition, {
+    message: 'Debe seleccionar una condición frente al IVA',
+  }),
   email: z.string().email('Email invalido').optional().or(z.literal('')),
   phone: z.string().optional(),
   address: z.string().optional(),
@@ -59,12 +71,14 @@ export function _ContractorFormModal({ open, onOpenChange, contractor }: Props) 
     register,
     handleSubmit,
     reset,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<ContractorFormData>({
     resolver: zodResolver(contractorSchema),
     defaultValues: {
       name: '',
       taxId: '',
+      taxCondition: CustomerTaxCondition.CONSUMIDOR_FINAL,
       email: '',
       phone: '',
       address: '',
@@ -77,6 +91,7 @@ export function _ContractorFormModal({ open, onOpenChange, contractor }: Props) 
       reset({
         name: contractor?.name ?? '',
         taxId: contractor?.taxId ?? '',
+        taxCondition: contractor?.taxCondition ?? CustomerTaxCondition.CONSUMIDOR_FINAL,
         email: contractor?.email ?? '',
         phone: contractor?.phone ?? '',
         address: contractor?.address ?? '',
@@ -115,6 +130,7 @@ export function _ContractorFormModal({ open, onOpenChange, contractor }: Props) 
     const cleanedData = {
       name: data.name,
       taxId: data.taxId || undefined,
+      taxCondition: data.taxCondition,
       email: data.email || undefined,
       phone: data.phone || undefined,
       address: data.address || undefined,
@@ -168,6 +184,37 @@ export function _ContractorFormModal({ open, onOpenChange, contractor }: Props) 
                 placeholder="XX-XXXXXXXX-X"
                 data-testid="contractor-taxId-input"
               />
+            </div>
+
+            {/* Condición frente al IVA */}
+            <div className="space-y-2">
+              <Label htmlFor="taxCondition">Condición frente al IVA *</Label>
+              <Controller
+                name="taxCondition"
+                control={control}
+                render={({ field }) => (
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <SelectTrigger data-testid="contractor-taxCondition-select">
+                      <SelectValue placeholder="Selecciona una condición" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(customerTaxConditionLabels).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              {errors.taxCondition && (
+                <p
+                  className="text-sm text-destructive"
+                  data-testid="contractor-taxCondition-error"
+                >
+                  {errors.taxCondition.message}
+                </p>
+              )}
             </div>
 
             {/* Email */}

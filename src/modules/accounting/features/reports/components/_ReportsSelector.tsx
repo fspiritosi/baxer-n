@@ -1,11 +1,11 @@
 'use client';
 
 import { Button } from '@/shared/components/ui/button';
-import { FileText, Book, BookOpen } from 'lucide-react';
+import { FileText, Book, BookOpen, Scale, TrendingUp } from 'lucide-react';
 
 interface ReportsSelectorProps {
-  selectedReport: 'trial-balance' | 'journal-book' | 'general-ledger';
-  onSelect: (report: 'trial-balance' | 'journal-book' | 'general-ledger') => void;
+  selectedReport: 'trial-balance' | 'journal-book' | 'general-ledger' | 'balance-sheet' | 'income-statement';
+  onSelect: (report: 'trial-balance' | 'journal-book' | 'general-ledger' | 'balance-sheet' | 'income-statement') => void;
 }
 
 export function _ReportsSelector({ selectedReport, onSelect }: ReportsSelectorProps) {
@@ -15,6 +15,18 @@ export function _ReportsSelector({ selectedReport, onSelect }: ReportsSelectorPr
       name: 'Balance de Sumas y Saldos',
       description: 'Muestra los saldos de todas las cuentas',
       icon: FileText,
+    },
+    {
+      id: 'balance-sheet',
+      name: 'Balance General',
+      description: 'Estado de situación patrimonial',
+      icon: Scale,
+    },
+    {
+      id: 'income-statement',
+      name: 'Estado de Resultados',
+      description: 'Ingresos, gastos y resultado del período',
+      icon: TrendingUp,
     },
     {
       id: 'journal-book',

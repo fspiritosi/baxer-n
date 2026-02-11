@@ -10,6 +10,7 @@ import {
   parseSearchParams,
   stateToPrismaParams,
 } from '@/shared/components/common/DataTable/helpers';
+import type { CustomerTaxCondition } from '@/generated/prisma/enums';
 
 // ============================================
 // TIPOS
@@ -18,6 +19,7 @@ import {
 export interface CreateContractorInput {
   name: string;
   taxId?: string;
+  taxCondition: CustomerTaxCondition;
   email?: string;
   phone?: string;
   address?: string;
@@ -26,6 +28,7 @@ export interface CreateContractorInput {
 export interface UpdateContractorInput {
   name?: string;
   taxId?: string;
+  taxCondition?: CustomerTaxCondition;
   email?: string;
   phone?: string;
   address?: string;
@@ -100,7 +103,7 @@ export async function getAllContractors() {
 }
 
 /**
- * Obtiene contratistas para select (solo id, nombre y CUIT)
+ * Obtiene contratistas para select (solo id, nombre, CUIT y condición IVA)
  */
 export async function getContractorsForSelect() {
   const companyId = await getActiveCompanyId();
@@ -109,7 +112,7 @@ export async function getContractorsForSelect() {
   try {
     return await prisma.contractor.findMany({
       where: { companyId, isActive: true },
-      select: { id: true, name: true, taxId: true },
+      select: { id: true, name: true, taxId: true, taxCondition: true },
       orderBy: { name: 'asc' },
     });
   } catch (error) {
@@ -157,6 +160,7 @@ export async function createContractor(input: CreateContractorInput) {
       data: {
         name: input.name,
         taxId: input.taxId || null,
+        taxCondition: input.taxCondition,
         email: input.email || null,
         phone: input.phone || null,
         address: input.address || null,
@@ -195,6 +199,7 @@ export async function updateContractor(id: string, input: UpdateContractorInput)
       data: {
         name: input.name,
         taxId: input.taxId,
+        taxCondition: input.taxCondition,
         email: input.email,
         phone: input.phone,
         address: input.address,

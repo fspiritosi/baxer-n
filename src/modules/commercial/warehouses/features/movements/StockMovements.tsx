@@ -1,8 +1,10 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { getStockMovements } from '../list/actions.server';
+import { getWarehousesForSelect, getStockProductsForSelect } from './actions.server';
 import { MovementsTable } from './components/_MovementsTable';
 import { MovementFilters } from './components/_MovementFilters';
 import { MovementsSummary } from './components/_MovementsSummary';
+import { _MovementActions } from './components/_MovementActions';
 
 interface StockMovementsProps {
   searchParams?: {
@@ -28,7 +30,12 @@ export async function StockMovements({ searchParams }: StockMovementsProps) {
     dateTo: searchParams?.dateTo ? new Date(searchParams.dateTo) : undefined,
   };
 
-  const movements = await getStockMovements(filters);
+  // Fetch data in parallel
+  const [movements, warehouses, products] = await Promise.all([
+    getStockMovements(filters),
+    getWarehousesForSelect(),
+    getStockProductsForSelect(),
+  ]);
 
   // Paginate in memory (for now, can be optimized with DB pagination later)
   const startIndex = (page - 1) * pageSize;
@@ -44,11 +51,14 @@ export async function StockMovements({ searchParams }: StockMovementsProps) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Movimientos de Stock</h1>
-        <p className="text-muted-foreground">
-          Historial completo de todos los movimientos de inventario
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Movimientos de Stock</h1>
+          <p className="text-muted-foreground">
+            Historial completo de todos los movimientos de inventario
+          </p>
+        </div>
+        <_MovementActions warehouses={warehouses} products={products} />
       </div>
 
       {/* Summary Statistics */}

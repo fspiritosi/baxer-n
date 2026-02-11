@@ -29,7 +29,7 @@ import {
   PopoverTrigger,
 } from '@/shared/components/ui/popover';
 import { CalendarIcon, Plus, Trash2 } from 'lucide-react';
-import { createInvoice } from '../../list/actions.server';
+import { createInvoice, getAllowedVoucherTypesForCustomer } from '../../list/actions.server';
 import { invoiceFormSchema, VOUCHER_TYPE_LABELS } from '../../shared/validators';
 import { z } from 'zod';
 import moment from 'moment';
@@ -37,6 +37,7 @@ import { cn } from '@/shared/lib/utils';
 import { useEffect, useState } from 'react';
 import { Card } from '@/shared/components/ui/card';
 import { Separator } from '@/shared/components/ui/separator';
+import type { VoucherType } from '@/generated/prisma/enums';
 
 type FormInput = z.infer<typeof invoiceFormSchema>;
 
@@ -64,6 +65,8 @@ interface InvoiceFormProps {
 export function InvoiceForm({ customers, pointsOfSale, products }: InvoiceFormProps) {
   const router = useRouter();
   const [totals, setTotals] = useState({ subtotal: 0, vatAmount: 0, total: 0 });
+  const [allowedVoucherTypes, setAllowedVoucherTypes] = useState<VoucherType[] | null>(null);
+  const [loadingVoucherTypes, setLoadingVoucherTypes] = useState(false);
 
   const form = useForm<FormInput>({
     resolver: zodResolver(invoiceFormSchema),
@@ -115,6 +118,40 @@ export function InvoiceForm({ customers, pointsOfSale, products }: InvoiceFormPr
 
     return () => subscription.unsubscribe();
   }, [form]);
+
+  // Cargar tipos de comprobante permitidos cuando se selecciona cliente
+  useEffect(() => {
+    const customerId = form.watch('customerId');
+
+    if (!customerId) {
+      setAllowedVoucherTypes(null);
+      return;
+    }
+
+    const fetchAllowedTypes = async () => {
+      try {
+        setLoadingVoucherTypes(true);
+        const types = await getAllowedVoucherTypesForCustomer(customerId);
+        setAllowedVoucherTypes(types);
+
+        // Si el tipo actual no está permitido, resetear
+        const currentType = form.getValues('voucherType');
+        if (currentType && !types.includes(currentType as VoucherType)) {
+          form.setValue('voucherType', types[0] as any);
+        }
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : 'Error al cargar tipos de comprobante'
+        );
+      } finally {
+        setLoadingVoucherTypes(false);
+      }
+    };
+
+    fetchAllowedTypes();
+  }, [form.watch('customerId')]);
 
   const handleAddLine = () => {
     append({
@@ -215,20 +252,42 @@ export function InvoiceForm({ customers, pointsOfSale, products }: InvoiceFormPr
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Tipo de Comprobante</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select
+                    onValueChange={field.onChange}
+                    value={field.value}
+                    disabled={loadingVoucherTypes || !form.watch('customerId')}
+                  >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar tipo" />
+                        <SelectValue
+                          placeholder={
+                            loadingVoucherTypes
+                              ? 'Cargando tipos...'
+                              : !form.watch('customerId')
+                              ? 'Primero seleccione un cliente'
+                              : 'Seleccionar tipo'
+                          }
+                        />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {Object.entries(VOUCHER_TYPE_LABELS).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
+                      {Object.entries(VOUCHER_TYPE_LABELS)
+                        .filter(([value]) =>
+                          !allowedVoucherTypes ||
+                          allowedVoucherTypes.includes(value as VoucherType)
+                        )
+                        .map(([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
+                  {allowedVoucherTypes && allowedVoucherTypes.length < 10 && (
+                    <p className="text-sm text-muted-foreground">
+                      Tipos permitidos según condición fiscal del cliente
+                    </p>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}
