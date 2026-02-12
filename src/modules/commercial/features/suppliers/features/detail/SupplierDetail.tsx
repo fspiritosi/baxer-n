@@ -2,7 +2,7 @@ import { checkPermission } from '@/shared/lib/permissions';
 import { getSupplierById } from '../list/actions.server';
 import { getSupplierAccountStatement } from './actions.server';
 import { _SupplierDetailContent } from './components/_SupplierDetailContent';
-import { _SupplierAccountStatement } from './components/_SupplierAccountStatement';
+import { _SupplierAccountStatementTab } from './components/_SupplierAccountStatementTab';
 import { notFound } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/ui/tabs';
 
@@ -34,7 +34,7 @@ export async function SupplierDetail({ supplierId }: SupplierDetailProps) {
       </TabsContent>
 
       <TabsContent value="account" className="mt-6">
-        <_SupplierAccountStatement accountStatement={accountStatement} />
+        <_SupplierAccountStatementTab accountStatement={accountStatement} />
       </TabsContent>
     </Tabs>
   );
