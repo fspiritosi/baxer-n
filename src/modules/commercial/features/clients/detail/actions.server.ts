@@ -309,6 +309,156 @@ export async function unassignEmployeeFromClient(clientId: string, employeeId: s
   }
 }
 
+/**
+ * Obtiene la cuenta corriente completa del cliente
+ */
+export async function getClientAccountStatement(clientId: string) {
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    // Verificar que el cliente existe y pertenece a la empresa
+    const client = await prisma.contractor.findFirst({
+      where: { id: clientId, companyId },
+      select: { id: true, name: true },
+    });
+
+    if (!client) {
+      throw new Error('Cliente no encontrado');
+    }
+
+    // Obtener facturas de venta
+    const salesInvoices = await prisma.salesInvoice.findMany({
+      where: {
+        customerId: clientId,
+        companyId,
+        status: 'CONFIRMED', // Solo facturas confirmadas
+      },
+      select: {
+        id: true,
+        fullNumber: true,
+        voucherType: true,
+        issueDate: true,
+        dueDate: true,
+        total: true,
+        status: true,
+        receiptItems: {
+          where: {
+            receipt: {
+              status: 'CONFIRMED', // Solo cobros confirmados
+            },
+          },
+          select: {
+            amount: true,
+            receipt: {
+              select: {
+                fullNumber: true,
+                date: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { issueDate: 'desc' },
+    });
+
+    // Obtener recibos
+    const receipts = await prisma.receipt.findMany({
+      where: {
+        customerId: clientId,
+        companyId,
+        status: 'CONFIRMED', // Solo recibos confirmados
+      },
+      select: {
+        id: true,
+        fullNumber: true,
+        date: true,
+        totalAmount: true,
+        status: true,
+        items: {
+          select: {
+            amount: true,
+            invoice: {
+              select: {
+                fullNumber: true,
+                issueDate: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { date: 'desc' },
+    });
+
+    // Calcular saldos
+    const invoicesWithBalance = salesInvoices.map((invoice) => {
+      const totalCollected = invoice.receiptItems.reduce(
+        (sum, item) => sum + Number(item.amount),
+        0
+      );
+      const balance = Number(invoice.total) - totalCollected;
+
+      return {
+        id: invoice.id,
+        fullNumber: invoice.fullNumber,
+        voucherType: invoice.voucherType,
+        issueDate: invoice.issueDate,
+        dueDate: invoice.dueDate,
+        total: Number(invoice.total),
+        collected: totalCollected,
+        balance,
+        status: invoice.status,
+        receipts: invoice.receiptItems.map((item) => ({
+          amount: Number(item.amount),
+          receiptNumber: item.receipt.fullNumber,
+          receiptDate: item.receipt.date,
+        })),
+      };
+    });
+
+    const receiptsFormatted = receipts.map((receipt) => ({
+      id: receipt.id,
+      fullNumber: receipt.fullNumber,
+      date: receipt.date,
+      totalAmount: Number(receipt.totalAmount),
+      status: receipt.status,
+      invoices: receipt.items.map((item) => ({
+        amount: Number(item.amount),
+        invoiceNumber: item.invoice.fullNumber,
+        invoiceDate: item.invoice.issueDate,
+      })),
+    }));
+
+    // Calcular totales
+    const totalInvoiced = invoicesWithBalance.reduce((sum, inv) => sum + inv.total, 0);
+    const totalCollected = invoicesWithBalance.reduce((sum, inv) => sum + inv.collected, 0);
+    const totalBalance = totalInvoiced - totalCollected;
+
+    logger.info('Cuenta corriente de cliente obtenida', {
+      data: { clientId, companyId, invoiceCount: invoicesWithBalance.length },
+    });
+
+    return {
+      client: {
+        id: client.id,
+        name: client.name,
+      },
+      invoices: invoicesWithBalance,
+      receipts: receiptsFormatted,
+      summary: {
+        totalInvoiced,
+        totalCollected,
+        totalBalance,
+      },
+    };
+  } catch (error) {
+    logger.error('Error al obtener cuenta corriente de cliente', {
+      data: { clientId, error },
+    });
+    throw error;
+  }
+}
+
 // ============================================
 // TIPOS INFERIDOS
 // ============================================
@@ -318,3 +468,6 @@ export type ClientVehicleAllocation = ClientDetail['vehicleAllocations'][number]
 export type ClientEmployeeAllocation = ClientDetail['employeeAllocations'][number];
 export type AvailableVehicle = Awaited<ReturnType<typeof getAvailableVehiclesForClient>>[number];
 export type AvailableEmployee = Awaited<ReturnType<typeof getAvailableEmployeesForClient>>[number];
+export type ClientAccountStatement = Awaited<ReturnType<typeof getClientAccountStatement>>;
+export type ClientInvoiceWithBalance = ClientAccountStatement['invoices'][number];
+export type ClientReceipt = ClientAccountStatement['receipts'][number];

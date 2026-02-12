@@ -4,12 +4,13 @@ import { Card, CardContent } from '@/shared/components/ui/card';
 import { UrlTabsContent } from '@/shared/components/ui/url-tabs';
 import { formatDateTime } from '@/shared/utils/formatters';
 
-import { getClientDetailById } from './actions.server';
+import { getClientDetailById, getClientAccountStatement } from './actions.server';
 import { _ClientHeader } from './components/_ClientHeader';
 import { _ClientDetailTabs, type ClientDetailTab } from './components/_ClientDetailTabs';
 import { _GeneralInfoTab } from './components/_GeneralInfoTab';
 import { _VehiclesTab } from './components/_VehiclesTab';
 import { _EmployeesTab } from './components/_EmployeesTab';
+import { _AccountStatementTab } from './components/_AccountStatementTab';
 
 interface Props {
   id: string;
@@ -18,13 +19,18 @@ interface Props {
 
 export async function ClientDetail({ id, searchParams }: Props) {
   let client;
+  let accountStatement;
+
   try {
-    client = await getClientDetailById(id);
+    [client, accountStatement] = await Promise.all([
+      getClientDetailById(id),
+      getClientAccountStatement(id),
+    ]);
   } catch {
     notFound();
   }
 
-  const validTabs: ClientDetailTab[] = ['general', 'vehicles', 'employees'];
+  const validTabs: ClientDetailTab[] = ['general', 'vehicles', 'employees', 'account'];
   const currentTab: ClientDetailTab = validTabs.includes(searchParams?.tab as ClientDetailTab)
     ? (searchParams?.tab as ClientDetailTab)
     : 'general';
@@ -44,6 +50,10 @@ export async function ClientDetail({ id, searchParams }: Props) {
 
         <UrlTabsContent value="employees" className="mt-6">
           <_EmployeesTab client={client} />
+        </UrlTabsContent>
+
+        <UrlTabsContent value="account" className="mt-6">
+          <_AccountStatementTab accountStatement={accountStatement} />
         </UrlTabsContent>
       </_ClientDetailTabs>
 
