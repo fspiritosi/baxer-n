@@ -17,8 +17,8 @@ import {
 } from '@/shared/components/ui/dropdown-menu';
 import { DataTableColumnHeader } from '@/shared/components/common/DataTable';
 import type { ModulePermissions } from '@/shared/lib/permissions';
-import type { Supplier } from '../../../shared/types';
-import { SUPPLIER_TAX_CONDITION_LABELS, SUPPLIER_STATUS_LABELS } from '../../../shared/types';
+import type { Supplier } from '../../shared/types';
+import { SUPPLIER_TAX_CONDITION_LABELS, SUPPLIER_STATUS_LABELS } from '../../shared/types';
 
 interface ColumnsProps {
   onEdit: (supplier: Supplier) => void;

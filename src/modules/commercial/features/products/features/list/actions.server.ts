@@ -13,26 +13,50 @@ import {
 } from '../../shared/validators';
 import type { Product } from '../../shared/types';
 
+interface GetProductsParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+}
+
 /**
- * Obtiene el listado de productos
+ * Obtiene el listado de productos con paginación
  */
-export async function getProducts(): Promise<Product[]> {
+export async function getProducts(params: GetProductsParams = {}) {
+  const { page = 1, pageSize = 10, search } = params;
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
   try {
     const { userId } = await auth();
     if (!userId) throw new Error('No autenticado');
 
-    const companyId = await getActiveCompanyId();
-    if (!companyId) throw new Error('No se encontró empresa activa');
+    const where = {
+      companyId,
+      ...(search && {
+        OR: [
+          { name: { contains: search, mode: 'insensitive' as const } },
+          { code: { contains: search, mode: 'insensitive' as const } },
+          { description: { contains: search, mode: 'insensitive' as const } },
+          { barcode: { contains: search, mode: 'insensitive' as const } },
+        ],
+      }),
+    };
 
-    const products = await prisma.product.findMany({
-      where: { companyId },
-      include: {
-        category: { select: { id: true, name: true } },
-      },
-      orderBy: [{ status: 'asc' }, { name: 'asc' }],
-    });
+    const [products, total] = await Promise.all([
+      prisma.product.findMany({
+        where,
+        include: {
+          category: { select: { id: true, name: true } },
+        },
+        orderBy: [{ status: 'asc' }, { name: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.product.count({ where }),
+    ]);
 
-    return products.map((product) => ({
+    const data = products.map((product) => ({
       ...product,
       costPrice: Number(product.costPrice),
       salePrice: Number(product.salePrice),
@@ -41,6 +65,16 @@ export async function getProducts(): Promise<Product[]> {
       minStock: product.minStock ? Number(product.minStock) : null,
       maxStock: product.maxStock ? Number(product.maxStock) : null,
     })) as unknown as Product[];
+
+    return {
+      data,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
+      },
+    };
   } catch (error) {
     logger.error('Error al obtener productos', { data: { error } });
     throw new Error('Error al obtener productos');
