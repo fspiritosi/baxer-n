@@ -22,18 +22,11 @@ import {
 } from '@/shared/components/ui/select';
 import { Input } from '@/shared/components/ui/input';
 import { Textarea } from '@/shared/components/ui/textarea';
-import { Calendar } from '@/shared/components/ui/calendar';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/shared/components/ui/popover';
-import { CalendarIcon, Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { createInvoice, getAllowedVoucherTypesForCustomer } from '../../list/actions.server';
 import { invoiceFormSchema, VOUCHER_TYPE_LABELS } from '../../shared/validators';
 import { z } from 'zod';
 import moment from 'moment';
-import { cn } from '@/shared/lib/utils';
 import { useEffect, useState } from 'react';
 import { Card } from '@/shared/components/ui/card';
 import { Separator } from '@/shared/components/ui/separator';
@@ -297,37 +290,15 @@ export function InvoiceForm({ customers, pointsOfSale, products }: InvoiceFormPr
               control={form.control}
               name="issueDate"
               render={({ field }) => (
-                <FormItem className="flex flex-col">
+                <FormItem>
                   <FormLabel>Fecha de Emisión</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            'w-full pl-3 text-left font-normal',
-                            !field.value && 'text-muted-foreground'
-                          )}
-                        >
-                          {field.value ? (
-                            moment(field.value).format('DD/MM/YYYY')
-                          ) : (
-                            <span>Seleccionar fecha</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={field.value}
-                        onSelect={field.onChange}
-                        disabled={(date) => date > new Date() || date < new Date('1900-01-01')}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
+                  <FormControl>
+                    <Input
+                      type="date"
+                      value={moment(field.value).format('YYYY-MM-DD')}
+                      onChange={(e) => field.onChange(new Date(e.target.value + 'T12:00:00'))}
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -337,37 +308,15 @@ export function InvoiceForm({ customers, pointsOfSale, products }: InvoiceFormPr
               control={form.control}
               name="dueDate"
               render={({ field }) => (
-                <FormItem className="flex flex-col">
+                <FormItem>
                   <FormLabel>Fecha de Vencimiento (Opcional)</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            'w-full pl-3 text-left font-normal',
-                            !field.value && 'text-muted-foreground'
-                          )}
-                        >
-                          {field.value ? (
-                            moment(field.value).format('DD/MM/YYYY')
-                          ) : (
-                            <span>Seleccionar fecha</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={field.value}
-                        onSelect={field.onChange}
-                        disabled={(date) => date < new Date()}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
+                  <FormControl>
+                    <Input
+                      type="date"
+                      value={field.value ? moment(field.value).format('YYYY-MM-DD') : ''}
+                      onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value + 'T12:00:00') : undefined)}
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}

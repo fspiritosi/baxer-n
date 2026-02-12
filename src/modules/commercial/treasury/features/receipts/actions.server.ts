@@ -543,3 +543,51 @@ export async function getAvailableBankAccounts() {
     return [];
   }
 }
+
+/**
+ * Elimina un recibo en estado DRAFT
+ */
+export async function deleteReceipt(receiptId: string) {
+  const { userId } = await auth();
+  if (!userId) throw new Error('No autenticado');
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    // Verificar que el recibo exista y esté en estado DRAFT
+    const receipt = await prisma.receipt.findFirst({
+      where: {
+        id: receiptId,
+        companyId,
+        status: 'DRAFT',
+      },
+    });
+
+    if (!receipt) {
+      throw new Error('Recibo no encontrado o no está en estado borrador');
+    }
+
+    // Eliminar el recibo (los items y payments se eliminan en cascada)
+    await prisma.receipt.delete({
+      where: { id: receiptId },
+    });
+
+    logger.info('Recibo eliminado', {
+      data: {
+        receiptId,
+        fullNumber: receipt.fullNumber,
+      },
+    });
+
+    revalidatePath('/dashboard/commercial/treasury/receipts');
+
+    return { success: true };
+  } catch (error) {
+    logger.error('Error al eliminar recibo', { data: { error, receiptId } });
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('Error al eliminar recibo');
+  }
+}

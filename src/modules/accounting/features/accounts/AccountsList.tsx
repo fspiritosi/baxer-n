@@ -3,6 +3,7 @@ import { getAccounts } from './actions.server';
 import { buildAccountTree } from '../../shared/utils';
 import { _AccountsTable } from './components/_AccountsTable';
 import { _CreateAccountButton } from './components/_CreateAccountButton';
+import { _ImportExportButtons } from './components/_ImportExportButtons';
 
 import { getActiveCompanyId } from '@/shared/lib/company';
 
@@ -21,7 +22,10 @@ export async function AccountsList() {
             Gestiona las cuentas contables de tu empresa
           </p>
         </div>
-        <_CreateAccountButton companyId={companyId} />
+        <div className="flex gap-2">
+          <_ImportExportButtons companyId={companyId} />
+          <_CreateAccountButton companyId={companyId} />
+        </div>
       </div>
 
       <Card>

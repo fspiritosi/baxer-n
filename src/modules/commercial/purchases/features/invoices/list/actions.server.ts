@@ -43,7 +43,7 @@ export async function getPurchaseInvoicesPaginated(searchParams: DataTableSearch
       ...searchWhere,
     };
 
-    const [data, total] = await Promise.all([
+    const [invoices, total] = await Promise.all([
       prisma.purchaseInvoice.findMany({
         where,
         skip,
@@ -71,6 +71,24 @@ export async function getPurchaseInvoicesPaginated(searchParams: DataTableSearch
       }),
       prisma.purchaseInvoice.count({ where }),
     ]);
+
+    // Convertir Decimals a Numbers para Client Components
+    const data = invoices.map((invoice) => ({
+      ...invoice,
+      subtotal: Number(invoice.subtotal),
+      vatAmount: Number(invoice.vatAmount),
+      otherTaxes: Number(invoice.otherTaxes),
+      total: Number(invoice.total),
+      lines: invoice.lines.map((line) => ({
+        ...line,
+        quantity: Number(line.quantity),
+        unitCost: Number(line.unitCost),
+        vatRate: Number(line.vatRate),
+        vatAmount: Number(line.vatAmount),
+        subtotal: Number(line.subtotal),
+        total: Number(line.total),
+      })),
+    }));
 
     return { data, total };
   } catch (error) {
@@ -133,7 +151,23 @@ export async function getPurchaseInvoiceById(id: string) {
       throw new Error('No tienes permiso para ver esta factura');
     }
 
-    return invoice;
+    // Convertir Decimals a Numbers para Client Components
+    return {
+      ...invoice,
+      subtotal: Number(invoice.subtotal),
+      vatAmount: Number(invoice.vatAmount),
+      otherTaxes: Number(invoice.otherTaxes),
+      total: Number(invoice.total),
+      lines: invoice.lines.map((line) => ({
+        ...line,
+        quantity: Number(line.quantity),
+        unitCost: Number(line.unitCost),
+        vatRate: Number(line.vatRate),
+        vatAmount: Number(line.vatAmount),
+        subtotal: Number(line.subtotal),
+        total: Number(line.total),
+      })),
+    };
   } catch (error) {
     logger.error('Error al obtener factura de compra', {
       data: { error, id, companyId },
@@ -323,6 +357,148 @@ export async function createPurchaseInvoice(input: PurchaseInvoiceFormInput) {
   } catch (error) {
     logger.error('Error al crear factura de compra', {
       data: { error, input, companyId, userId },
+    });
+    throw error;
+  }
+}
+
+/**
+ * Actualiza una factura de compra (solo si está en estado DRAFT)
+ */
+export async function updatePurchaseInvoice(id: string, input: PurchaseInvoiceFormInput) {
+  const { userId } = await auth();
+  if (!userId) throw new Error('No autenticado');
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    // Verificar que la factura existe
+    const existingInvoice = await prisma.purchaseInvoice.findUnique({
+      where: { id },
+      include: {
+        lines: true,
+      },
+    });
+
+    if (!existingInvoice) {
+      throw new Error('Factura de compra no encontrada');
+    }
+
+    if (existingInvoice.companyId !== companyId) {
+      throw new Error('No tienes permiso para editar esta factura');
+    }
+
+    // VALIDACIÓN CRÍTICA: Solo permitir edición si está en estado DRAFT
+    if (existingInvoice.status !== 'DRAFT') {
+      throw new Error(
+        'No se puede editar una factura confirmada. Solo se pueden editar facturas en estado borrador.'
+      );
+    }
+
+    // Calcular totales
+    let subtotal = 0;
+    let vatAmount = 0;
+
+    const linesData = input.lines.map((line) => {
+      const qty = parseFloat(line.quantity);
+      const cost = parseFloat(line.unitCost);
+      const vat = parseFloat(line.vatRate);
+
+      const lineSubtotal = qty * cost;
+      const lineVat = lineSubtotal * (vat / 100);
+      const lineTotal = lineSubtotal + lineVat;
+
+      subtotal += lineSubtotal;
+      vatAmount += lineVat;
+
+      return {
+        productId: line.productId || null,
+        description: line.description,
+        quantity: qty,
+        unitCost: cost,
+        vatRate: vat,
+        vatAmount: lineVat,
+        subtotal: lineSubtotal,
+        total: lineTotal,
+      };
+    });
+
+    const total = subtotal + vatAmount;
+
+    // Verificar que no exista otra factura con el mismo número
+    const fullNumber = `${input.pointOfSale}-${input.number}`;
+    const duplicate = await prisma.purchaseInvoice.findFirst({
+      where: {
+        companyId,
+        supplierId: input.supplierId,
+        fullNumber,
+        id: { not: id }, // Excluir la factura actual
+      },
+    });
+
+    if (duplicate) {
+      throw new Error(
+        `Ya existe otra factura de este proveedor con el número ${fullNumber}`
+      );
+    }
+
+    // Actualizar factura y líneas en transacción
+    const invoice = await prisma.$transaction(async (tx) => {
+      // Eliminar líneas existentes
+      await tx.purchaseInvoiceLine.deleteMany({
+        where: { invoiceId: id },
+      });
+
+      // Actualizar factura con nuevas líneas
+      return await tx.purchaseInvoice.update({
+        where: { id },
+        data: {
+          supplierId: input.supplierId,
+          voucherType: input.voucherType as VoucherType,
+          pointOfSale: input.pointOfSale,
+          number: input.number,
+          fullNumber,
+          issueDate: input.issueDate,
+          dueDate: input.dueDate || null,
+          cae: input.cae || null,
+          subtotal,
+          vatAmount,
+          otherTaxes: 0,
+          total,
+          notes: input.notes || null,
+          lines: {
+            create: linesData,
+          },
+        },
+        include: {
+          supplier: true,
+          lines: {
+            include: {
+              product: true,
+            },
+          },
+        },
+      });
+    });
+
+    logger.info('Factura de compra actualizada', {
+      data: {
+        invoiceId: id,
+        fullNumber: invoice.fullNumber,
+        supplierId: input.supplierId,
+        total,
+        companyId,
+        userId,
+      },
+    });
+
+    revalidatePath('/dashboard/commercial/purchases');
+    revalidatePath(`/dashboard/commercial/purchases/${id}`);
+    return invoice;
+  } catch (error) {
+    logger.error('Error al actualizar factura de compra', {
+      data: { error, id, input, companyId, userId },
     });
     throw error;
   }

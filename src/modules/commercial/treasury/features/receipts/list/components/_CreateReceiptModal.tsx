@@ -20,7 +20,8 @@ import { Plus, Trash2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { createReceiptSchema, type CreateReceiptFormData, PAYMENT_METHOD_LABELS } from '../../../../shared/validators';
 import { createReceipt, getPendingInvoices, getAvailableCashRegisters, getAvailableBankAccounts } from '../../actions.server';
-import { useQuery } from '@tanstack/react-query';
+import { getContractorsForSelect } from '@/modules/company/features/contractors/list/actions.server';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Skeleton } from '@/shared/components/ui/skeleton';
 import { Badge } from '@/shared/components/ui/badge';
 import { Alert, AlertDescription } from '@/shared/components/ui/alert';
@@ -33,7 +34,7 @@ interface CreateReceiptModalProps {
 export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
   const [open, setOpen] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
-  const [customers, setCustomers] = useState<Array<{ id: string; name: string }>>([]);
+  const queryClient = useQueryClient();
 
   const form = useForm<CreateReceiptFormData>({
     resolver: zodResolver(createReceiptSchema),
@@ -54,6 +55,13 @@ export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
   const { fields: paymentFields, append: appendPayment, remove: removePayment } = useFieldArray({
     control: form.control,
     name: 'payments',
+  });
+
+  // Query para clientes
+  const { data: customersData = [] } = useQuery({
+    queryKey: ['contractors'],
+    queryFn: getContractorsForSelect,
+    enabled: open,
   });
 
   // Query para facturas pendientes
@@ -77,13 +85,6 @@ export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
     enabled: open,
   });
 
-  // Cargar clientes (simplificado - en producción usar una query real)
-  useEffect(() => {
-    if (open) {
-      // TODO: Implementar getCustomers() real
-      setCustomers([]);
-    }
-  }, [open]);
 
   const handleCustomerChange = (customerId: string) => {
     setSelectedCustomerId(customerId);
@@ -137,10 +138,14 @@ export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
     try {
       await createReceipt(data);
       toast.success('Recibo creado correctamente');
+
+      // Invalidar cache de React Query para actualizar la tabla
+      await queryClient.invalidateQueries({ queryKey: ['receipts'] });
+      await queryClient.invalidateQueries({ queryKey: ['pendingInvoices'] });
+
       setOpen(false);
       form.reset();
       setSelectedCustomerId(null);
-      onSuccess();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Error al crear recibo');
     }
@@ -180,10 +185,10 @@ export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {customers.length === 0 && (
+                          {customersData.length === 0 && (
                             <div className="p-2 text-sm text-muted-foreground">No hay clientes disponibles</div>
                           )}
-                          {customers.map((customer) => (
+                          {customersData.map((customer) => (
                             <SelectItem key={customer.id} value={customer.id}>
                               {customer.name}
                             </SelectItem>
@@ -205,7 +210,7 @@ export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
                         <Input
                           type="date"
                           value={moment(field.value).format('YYYY-MM-DD')}
-                          onChange={(e) => field.onChange(new Date(e.target.value))}
+                          onChange={(e) => field.onChange(new Date(e.target.value + 'T12:00:00'))}
                         />
                       </FormControl>
                       <FormMessage />
@@ -289,9 +294,25 @@ export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
                         render={({ field }) => (
                           <FormItem className="w-32">
                             <FormLabel className="text-xs">Monto</FormLabel>
-                            <FormControl>
-                              <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                            </FormControl>
+                            <div className="flex gap-1">
+                              <FormControl>
+                                <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                              </FormControl>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="px-2 text-xs"
+                                onClick={() => {
+                                  if (invoice) {
+                                    form.setValue(`items.${index}.amount`, invoice.pendingAmount.toFixed(2));
+                                  }
+                                }}
+                                title="Usar monto pendiente completo"
+                              >
+                                Total
+                              </Button>
+                            </div>
                             <FormMessage />
                           </FormItem>
                         )}

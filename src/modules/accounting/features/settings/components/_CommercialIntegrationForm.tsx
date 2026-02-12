@@ -20,16 +20,16 @@ import {
 import { saveAccountingSettings, getAccountingSettings } from '../actions.server';
 import { useState } from 'react';
 
-// Esquema de validación
+// Esquema de validación con transformación de "__clear__" a null
 const commercialIntegrationSchema = z.object({
-  salesAccountId: z.string().nullable(),
-  purchasesAccountId: z.string().nullable(),
-  receivablesAccountId: z.string().nullable(),
-  payablesAccountId: z.string().nullable(),
-  vatDebitAccountId: z.string().nullable(),
-  vatCreditAccountId: z.string().nullable(),
-  defaultCashAccountId: z.string().nullable(),
-  defaultBankAccountId: z.string().nullable(),
+  salesAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
+  purchasesAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
+  receivablesAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
+  payablesAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
+  vatDebitAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
+  vatCreditAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
+  defaultCashAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
+  defaultBankAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
 });
 
 type FormValues = z.infer<typeof commercialIntegrationSchema>;
@@ -93,6 +93,11 @@ export function _CommercialIntegrationForm({
     return `${account.code} - ${account.name}`;
   };
 
+  // Helper para manejar el cambio de valor en los selects
+  const handleSelectChange = (field: keyof FormValues, value: string) => {
+    form.setValue(field, value === '__clear__' ? null : value);
+  };
+
   return (
     <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
       {/* Ventas y Compras */}
@@ -103,7 +108,7 @@ export function _CommercialIntegrationForm({
             <Label htmlFor="salesAccountId">Cuenta de Ventas</Label>
             <Select
               value={form.watch('salesAccountId') || undefined}
-              onValueChange={(value) => form.setValue('salesAccountId', value || null)}
+              onValueChange={(value) => handleSelectChange('salesAccountId', value)}
               disabled={isLoading}
             >
               <SelectTrigger id="salesAccountId">
@@ -129,7 +134,7 @@ export function _CommercialIntegrationForm({
             <Label htmlFor="purchasesAccountId">Cuenta de Compras</Label>
             <Select
               value={form.watch('purchasesAccountId') || undefined}
-              onValueChange={(value) => form.setValue('purchasesAccountId', value || null)}
+              onValueChange={(value) => handleSelectChange('purchasesAccountId', value)}
               disabled={isLoading}
             >
               <SelectTrigger id="purchasesAccountId">
@@ -161,7 +166,7 @@ export function _CommercialIntegrationForm({
             <Label htmlFor="receivablesAccountId">Cuentas por Cobrar</Label>
             <Select
               value={form.watch('receivablesAccountId') || undefined}
-              onValueChange={(value) => form.setValue('receivablesAccountId', value || null)}
+              onValueChange={(value) => handleSelectChange('receivablesAccountId', value)}
               disabled={isLoading}
             >
               <SelectTrigger id="receivablesAccountId">
@@ -187,7 +192,7 @@ export function _CommercialIntegrationForm({
             <Label htmlFor="payablesAccountId">Cuentas por Pagar</Label>
             <Select
               value={form.watch('payablesAccountId') || undefined}
-              onValueChange={(value) => form.setValue('payablesAccountId', value || null)}
+              onValueChange={(value) => handleSelectChange('payablesAccountId', value)}
               disabled={isLoading}
             >
               <SelectTrigger id="payablesAccountId">
@@ -219,7 +224,7 @@ export function _CommercialIntegrationForm({
             <Label htmlFor="vatDebitAccountId">IVA Débito Fiscal</Label>
             <Select
               value={form.watch('vatDebitAccountId') || undefined}
-              onValueChange={(value) => form.setValue('vatDebitAccountId', value || null)}
+              onValueChange={(value) => handleSelectChange('vatDebitAccountId', value)}
               disabled={isLoading}
             >
               <SelectTrigger id="vatDebitAccountId">
@@ -245,7 +250,7 @@ export function _CommercialIntegrationForm({
             <Label htmlFor="vatCreditAccountId">IVA Crédito Fiscal</Label>
             <Select
               value={form.watch('vatCreditAccountId') || undefined}
-              onValueChange={(value) => form.setValue('vatCreditAccountId', value || null)}
+              onValueChange={(value) => handleSelectChange('vatCreditAccountId', value)}
               disabled={isLoading}
             >
               <SelectTrigger id="vatCreditAccountId">
@@ -277,7 +282,7 @@ export function _CommercialIntegrationForm({
             <Label htmlFor="defaultCashAccountId">Caja por Defecto</Label>
             <Select
               value={form.watch('defaultCashAccountId') || undefined}
-              onValueChange={(value) => form.setValue('defaultCashAccountId', value || null)}
+              onValueChange={(value) => handleSelectChange('defaultCashAccountId', value)}
               disabled={isLoading}
             >
               <SelectTrigger id="defaultCashAccountId">
@@ -303,7 +308,7 @@ export function _CommercialIntegrationForm({
             <Label htmlFor="defaultBankAccountId">Banco por Defecto</Label>
             <Select
               value={form.watch('defaultBankAccountId') || undefined}
-              onValueChange={(value) => form.setValue('defaultBankAccountId', value || null)}
+              onValueChange={(value) => handleSelectChange('defaultBankAccountId', value)}
               disabled={isLoading}
             >
               <SelectTrigger id="defaultBankAccountId">

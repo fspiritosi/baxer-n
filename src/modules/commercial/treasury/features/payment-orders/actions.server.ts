@@ -352,7 +352,8 @@ export async function getPaymentOrders(params: { supplierId?: string; status?: s
         supplier: {
           select: {
             id: true,
-            name: true,
+            businessName: true,
+            tradeName: true,
           },
         },
         _count: {
@@ -371,8 +372,14 @@ export async function getPaymentOrders(params: { supplierId?: string; status?: s
       totalAmount: Number(po.totalAmount),
     })) as PaymentOrderListItem[];
   } catch (error) {
-    logger.error('Error al obtener órdenes de pago', { data: { error } });
-    throw new Error('Error al obtener órdenes de pago');
+    logger.error('Error al obtener órdenes de pago', {
+      data: {
+        error,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      }
+    });
+    throw error;
   }
 }
 
@@ -398,7 +405,8 @@ export async function getPaymentOrder(id: string): Promise<PaymentOrderWithDetai
         supplier: {
           select: {
             id: true,
-            name: true,
+            businessName: true,
+            tradeName: true,
             taxId: true,
           },
         },
@@ -463,5 +471,53 @@ export async function getPaymentOrder(id: string): Promise<PaymentOrderWithDetai
   } catch (error) {
     logger.error('Error al obtener orden de pago', { data: { error, id } });
     throw new Error('Error al obtener orden de pago');
+  }
+}
+
+/**
+ * Elimina una orden de pago en estado DRAFT
+ */
+export async function deletePaymentOrder(paymentOrderId: string) {
+  const { userId } = await auth();
+  if (!userId) throw new Error('No autenticado');
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    // Verificar que la orden exista y esté en estado DRAFT
+    const paymentOrder = await prisma.paymentOrder.findFirst({
+      where: {
+        id: paymentOrderId,
+        companyId,
+        status: 'DRAFT',
+      },
+    });
+
+    if (!paymentOrder) {
+      throw new Error('Orden de pago no encontrada o no está en estado borrador');
+    }
+
+    // Eliminar la orden de pago (los items y payments se eliminan en cascada)
+    await prisma.paymentOrder.delete({
+      where: { id: paymentOrderId },
+    });
+
+    logger.info('Orden de pago eliminada', {
+      data: {
+        paymentOrderId,
+        fullNumber: paymentOrder.fullNumber,
+      },
+    });
+
+    revalidatePath('/dashboard/commercial/treasury/payment-orders');
+
+    return { success: true };
+  } catch (error) {
+    logger.error('Error al eliminar orden de pago', { data: { error, paymentOrderId } });
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('Error al eliminar orden de pago');
   }
 }

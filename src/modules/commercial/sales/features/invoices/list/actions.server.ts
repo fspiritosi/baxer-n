@@ -60,7 +60,13 @@ export async function getInvoices() {
       },
     });
 
-    return invoices;
+    // Convertir Decimals a Numbers para Client Components
+    return invoices.map((invoice) => ({
+      ...invoice,
+      subtotal: Number(invoice.subtotal),
+      vatAmount: Number(invoice.vatAmount),
+      total: Number(invoice.total),
+    }));
   } catch (error) {
     logger.error('Error al obtener facturas', {
       data: { companyId, error },
@@ -129,7 +135,22 @@ export async function getInvoiceById(id: string) {
       throw new Error('Factura no encontrada');
     }
 
-    return invoice;
+    // Convertir Decimals a Numbers para Client Components
+    return {
+      ...invoice,
+      subtotal: Number(invoice.subtotal),
+      vatAmount: Number(invoice.vatAmount),
+      total: Number(invoice.total),
+      lines: invoice.lines.map((line) => ({
+        ...line,
+        quantity: Number(line.quantity),
+        unitPrice: Number(line.unitPrice),
+        vatRate: Number(line.vatRate),
+        vatAmount: Number(line.vatAmount),
+        subtotal: Number(line.subtotal),
+        total: Number(line.total),
+      })),
+    };
   } catch (error) {
     logger.error('Error al obtener factura', {
       data: { id, companyId, error },

@@ -22,21 +22,14 @@ import {
 } from '@/shared/components/ui/select';
 import { Input } from '@/shared/components/ui/input';
 import { Textarea } from '@/shared/components/ui/textarea';
-import { Calendar } from '@/shared/components/ui/calendar';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/shared/components/ui/popover';
-import { CalendarIcon, Plus, Trash2 } from 'lucide-react';
-import { createPurchaseInvoice } from '../../list/actions.server';
+import { Plus, Trash2 } from 'lucide-react';
+import { createPurchaseInvoice, updatePurchaseInvoice } from '../../list/actions.server';
 import {
   purchaseInvoiceFormSchema,
   VOUCHER_TYPE_LABELS,
   type PurchaseInvoiceFormInput,
 } from '../../shared/validators';
 import moment from 'moment';
-import { cn } from '@/shared/lib/utils';
 import { useEffect, useState } from 'react';
 import { Card } from '@/shared/components/ui/card';
 import { Separator } from '@/shared/components/ui/separator';
@@ -45,18 +38,24 @@ import type { SupplierSelectItem, ProductSelectItem } from '../../list/actions.s
 interface PurchaseInvoiceFormProps {
   suppliers: SupplierSelectItem[];
   products: ProductSelectItem[];
+  mode?: 'create' | 'edit';
+  invoiceId?: string;
+  defaultValues?: Partial<PurchaseInvoiceFormInput>;
 }
 
 export function _PurchaseInvoiceForm({
   suppliers,
   products,
+  mode = 'create',
+  invoiceId,
+  defaultValues: initialValues,
 }: PurchaseInvoiceFormProps) {
   const router = useRouter();
   const [totals, setTotals] = useState({ subtotal: 0, vatAmount: 0, total: 0 });
 
   const form = useForm<PurchaseInvoiceFormInput>({
     resolver: zodResolver(purchaseInvoiceFormSchema),
-    defaultValues: {
+    defaultValues: initialValues || {
       supplierId: '',
       voucherType: 'FACTURA_A',
       pointOfSale: '',
@@ -108,12 +107,22 @@ export function _PurchaseInvoiceForm({
 
   const onSubmit = async (data: PurchaseInvoiceFormInput) => {
     try {
-      const invoice = await createPurchaseInvoice(data);
-      toast.success('Factura de compra creada correctamente');
-      router.push(`/dashboard/commercial/purchases/${invoice.id}`);
+      if (mode === 'edit' && invoiceId) {
+        // Modo edición
+        const invoice = await updatePurchaseInvoice(invoiceId, data);
+        toast.success('Factura de compra actualizada correctamente');
+        router.push(`/dashboard/commercial/purchases/${invoice.id}`);
+      } else {
+        // Modo creación
+        const invoice = await createPurchaseInvoice(data);
+        toast.success('Factura de compra creada correctamente');
+        router.push(`/dashboard/commercial/purchases/${invoice.id}`);
+      }
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : 'Error al crear la factura'
+        error instanceof Error
+          ? error.message
+          : `Error al ${mode === 'edit' ? 'actualizar' : 'crear'} la factura`
       );
     }
   };
@@ -241,39 +250,15 @@ export function _PurchaseInvoiceForm({
               control={form.control}
               name="issueDate"
               render={({ field }) => (
-                <FormItem className="flex flex-col">
+                <FormItem>
                   <FormLabel>Fecha de Emisión *</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            'pl-3 text-left font-normal',
-                            !field.value && 'text-muted-foreground'
-                          )}
-                        >
-                          {field.value ? (
-                            moment(field.value).format('DD/MM/YYYY')
-                          ) : (
-                            <span>Selecciona una fecha</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={field.value}
-                        onSelect={field.onChange}
-                        disabled={(date) =>
-                          date > new Date() || date < new Date('2000-01-01')
-                        }
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
+                  <FormControl>
+                    <Input
+                      type="date"
+                      value={moment(field.value).format('YYYY-MM-DD')}
+                      onChange={(e) => field.onChange(new Date(e.target.value + 'T12:00:00'))}
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -284,37 +269,15 @@ export function _PurchaseInvoiceForm({
               control={form.control}
               name="dueDate"
               render={({ field }) => (
-                <FormItem className="flex flex-col">
+                <FormItem>
                   <FormLabel>Fecha de Vencimiento</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            'pl-3 text-left font-normal',
-                            !field.value && 'text-muted-foreground'
-                          )}
-                        >
-                          {field.value ? (
-                            moment(field.value).format('DD/MM/YYYY')
-                          ) : (
-                            <span>Selecciona una fecha</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={field.value}
-                        onSelect={field.onChange}
-                        disabled={(date) => date < new Date()}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
+                  <FormControl>
+                    <Input
+                      type="date"
+                      value={field.value ? moment(field.value).format('YYYY-MM-DD') : ''}
+                      onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value + 'T12:00:00') : undefined)}
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}

@@ -10,12 +10,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/shared/components/ui/dropdown-menu';
-import { MoreHorizontal, CheckCircle, Eye } from 'lucide-react';
+import { MoreHorizontal, CheckCircle, Eye, Download, Edit, Trash2 } from 'lucide-react';
 import { PAYMENT_ORDER_STATUS_LABELS, PAYMENT_ORDER_STATUS_BADGES } from '../../../../shared/validators';
 import type { PaymentOrderListItem } from '../../../../shared/types';
 import moment from 'moment';
-import { confirmPaymentOrder } from '../../actions.server';
+import { confirmPaymentOrder, deletePaymentOrder } from '../../actions.server';
 import { toast } from 'sonner';
+import { PaymentOrderDetailModal } from './_PaymentOrderDetailModal';
+import { EditPaymentOrderModal } from './_EditPaymentOrderModal';
 import { useState } from 'react';
 import {
   AlertDialog,
@@ -35,8 +37,12 @@ interface PaymentOrdersTableProps {
 
 export function PaymentOrdersTable({ paymentOrders, onUpdate }: PaymentOrdersTableProps) {
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedPaymentOrderId, setSelectedPaymentOrderId] = useState<string | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleConfirm = async () => {
     if (!selectedPaymentOrderId) return;
@@ -51,6 +57,23 @@ export function PaymentOrdersTable({ paymentOrders, onUpdate }: PaymentOrdersTab
     } finally {
       setIsConfirming(false);
       setConfirmDialogOpen(false);
+      setSelectedPaymentOrderId(null);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedPaymentOrderId) return;
+
+    setIsDeleting(true);
+    try {
+      await deletePaymentOrder(selectedPaymentOrderId);
+      toast.success('Orden de pago eliminada correctamente');
+      onUpdate();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Error al eliminar orden de pago');
+    } finally {
+      setIsDeleting(false);
+      setDeleteDialogOpen(false);
       setSelectedPaymentOrderId(null);
     }
   };
@@ -71,7 +94,7 @@ export function PaymentOrdersTable({ paymentOrders, onUpdate }: PaymentOrdersTab
       accessorKey: 'supplier',
       header: 'Proveedor',
       meta: { title: 'Proveedor' },
-      cell: ({ row }) => row.original.supplier.name,
+      cell: ({ row }) => row.original.supplier.tradeName || row.original.supplier.businessName,
     },
     {
       accessorKey: 'totalAmount',
@@ -121,21 +144,58 @@ export function PaymentOrdersTable({ paymentOrders, onUpdate }: PaymentOrdersTab
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  setSelectedPaymentOrderId(paymentOrder.id);
+                  setDetailModalOpen(true);
+                }}
+              >
                 <Eye className="mr-2 h-4 w-4" />
                 Ver Detalle
               </DropdownMenuItem>
 
+              <DropdownMenuItem
+                onClick={() => {
+                  window.open(`/api/payment-orders/${paymentOrder.id}/pdf`, '_blank');
+                }}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Descargar PDF
+              </DropdownMenuItem>
+
               {paymentOrder.status === 'DRAFT' && (
-                <DropdownMenuItem
-                  onClick={() => {
-                    setSelectedPaymentOrderId(paymentOrder.id);
-                    setConfirmDialogOpen(true);
-                  }}
-                >
-                  <CheckCircle className="mr-2 h-4 w-4" />
-                  Confirmar Orden
-                </DropdownMenuItem>
+                <>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSelectedPaymentOrderId(paymentOrder.id);
+                      setEditModalOpen(true);
+                    }}
+                  >
+                    <Edit className="mr-2 h-4 w-4" />
+                    Editar
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSelectedPaymentOrderId(paymentOrder.id);
+                      setConfirmDialogOpen(true);
+                    }}
+                  >
+                    <CheckCircle className="mr-2 h-4 w-4" />
+                    Confirmar Orden
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSelectedPaymentOrderId(paymentOrder.id);
+                      setDeleteDialogOpen(true);
+                    }}
+                    className="text-destructive"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Eliminar
+                  </DropdownMenuItem>
+                </>
               )}
             </DropdownMenuContent>
           </DropdownMenu>
@@ -148,6 +208,7 @@ export function PaymentOrdersTable({ paymentOrders, onUpdate }: PaymentOrdersTab
     <>
       <DataTable<PaymentOrderListItem> columns={columns} data={paymentOrders} totalRows={paymentOrders.length} />
 
+      {/* Diálogo de Confirmación */}
       <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -165,6 +226,43 @@ export function PaymentOrdersTable({ paymentOrders, onUpdate }: PaymentOrdersTab
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Diálogo de Eliminación */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar orden de pago?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción eliminará permanentemente la orden de pago y todos sus registros asociados.
+              Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? 'Eliminando...' : 'Eliminar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Modal de Detalle */}
+      <PaymentOrderDetailModal
+        paymentOrderId={selectedPaymentOrderId}
+        open={detailModalOpen}
+        onOpenChange={setDetailModalOpen}
+      />
+
+      {/* Modal de Edición */}
+      <EditPaymentOrderModal
+        paymentOrderId={selectedPaymentOrderId}
+        open={editModalOpen}
+        onOpenChange={setEditModalOpen}
+      />
     </>
   );
 }

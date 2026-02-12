@@ -21,7 +21,8 @@ import { toast } from 'sonner';
 import { createPaymentOrderSchema, type CreatePaymentOrderFormData, PAYMENT_METHOD_LABELS } from '../../../../shared/validators';
 import { createPaymentOrder, getPendingPurchaseInvoices } from '../../actions.server';
 import { getAvailableCashRegisters, getAvailableBankAccounts } from '../../../receipts/actions.server';
-import { useQuery } from '@tanstack/react-query';
+import { getSuppliersForSelect } from '@/modules/commercial/purchases/features/invoices/list/actions.server';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Skeleton } from '@/shared/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/shared/components/ui/alert';
 import moment from 'moment';
@@ -33,7 +34,7 @@ interface CreatePaymentOrderModalProps {
 export function CreatePaymentOrderModal({ onSuccess }: CreatePaymentOrderModalProps) {
   const [open, setOpen] = useState(false);
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
-  const [suppliers, setSuppliers] = useState<Array<{ id: string; name: string }>>([]);
+  const queryClient = useQueryClient();
 
   const form = useForm<CreatePaymentOrderFormData>({
     resolver: zodResolver(createPaymentOrderSchema),
@@ -56,6 +57,13 @@ export function CreatePaymentOrderModal({ onSuccess }: CreatePaymentOrderModalPr
     name: 'payments',
   });
 
+  // Query para proveedores
+  const { data: suppliersData = [] } = useQuery({
+    queryKey: ['suppliers'],
+    queryFn: getSuppliersForSelect,
+    enabled: open,
+  });
+
   // Query para facturas pendientes de pago
   const { data: pendingInvoices = [], isLoading: loadingInvoices } = useQuery({
     queryKey: ['pendingPurchaseInvoices', selectedSupplierId],
@@ -76,14 +84,6 @@ export function CreatePaymentOrderModal({ onSuccess }: CreatePaymentOrderModalPr
     queryFn: getAvailableBankAccounts,
     enabled: open,
   });
-
-  // Cargar proveedores (simplificado - en producción usar una query real)
-  useEffect(() => {
-    if (open) {
-      // TODO: Implementar getSuppliers() real
-      setSuppliers([]);
-    }
-  }, [open]);
 
   const handleSupplierChange = (supplierId: string) => {
     setSelectedSupplierId(supplierId);
@@ -137,10 +137,14 @@ export function CreatePaymentOrderModal({ onSuccess }: CreatePaymentOrderModalPr
     try {
       await createPaymentOrder(data);
       toast.success('Orden de pago creada correctamente');
+
+      // Invalidar cache de React Query para actualizar la tabla
+      await queryClient.invalidateQueries({ queryKey: ['paymentOrders'] });
+      await queryClient.invalidateQueries({ queryKey: ['pendingPurchaseInvoices'] });
+
       setOpen(false);
       form.reset();
       setSelectedSupplierId(null);
-      onSuccess();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Error al crear orden de pago');
     }
@@ -180,12 +184,12 @@ export function CreatePaymentOrderModal({ onSuccess }: CreatePaymentOrderModalPr
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {suppliers.length === 0 && (
+                          {suppliersData.length === 0 && (
                             <div className="p-2 text-sm text-muted-foreground">No hay proveedores disponibles</div>
                           )}
-                          {suppliers.map((supplier) => (
+                          {suppliersData.map((supplier) => (
                             <SelectItem key={supplier.id} value={supplier.id}>
-                              {supplier.name}
+                              {supplier.tradeName || supplier.businessName}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -205,7 +209,7 @@ export function CreatePaymentOrderModal({ onSuccess }: CreatePaymentOrderModalPr
                         <Input
                           type="date"
                           value={moment(field.value).format('YYYY-MM-DD')}
-                          onChange={(e) => field.onChange(new Date(e.target.value))}
+                          onChange={(e) => field.onChange(new Date(e.target.value + 'T12:00:00'))}
                         />
                       </FormControl>
                       <FormMessage />
@@ -289,9 +293,25 @@ export function CreatePaymentOrderModal({ onSuccess }: CreatePaymentOrderModalPr
                         render={({ field }) => (
                           <FormItem className="w-32">
                             <FormLabel className="text-xs">Monto</FormLabel>
-                            <FormControl>
-                              <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                            </FormControl>
+                            <div className="flex gap-1">
+                              <FormControl>
+                                <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                              </FormControl>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="px-2 text-xs"
+                                onClick={() => {
+                                  if (invoice) {
+                                    form.setValue(`items.${index}.amount`, invoice.pendingAmount.toFixed(2));
+                                  }
+                                }}
+                                title="Usar monto pendiente completo"
+                              >
+                                Total
+                              </Button>
+                            </div>
                             <FormMessage />
                           </FormItem>
                         )}

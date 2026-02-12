@@ -803,7 +803,6 @@ model Contractor {
   quotes              Quote[]
   salesInvoices       SalesInvoice[]
   receipts            Receipt[]
-  paymentOrders       PaymentOrder[]  @relation("SupplierPaymentOrders")
 
   @@unique([companyId, name])
   @@unique([companyId, taxId])
@@ -1660,6 +1659,7 @@ model Supplier {
   company           Company               @relation(fields: [companyId], references: [id])
   defaultAccount    Account?              @relation(fields: [defaultAccountId], references: [id])
   purchaseInvoices  PurchaseInvoice[]
+  paymentOrders     PaymentOrder[]
 
   createdBy         String                @map("created_by")
   createdAt         DateTime              @default(now()) @map("created_at")
@@ -2417,7 +2417,7 @@ model PaymentOrder {
   journalEntryId  String?             @map("journal_entry_id") @db.Uuid
 
   company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  supplier        Contractor          @relation("SupplierPaymentOrders", fields: [supplierId], references: [id])
+  supplier        Supplier            @relation(fields: [supplierId], references: [id])
   items           PaymentOrderItem[]
   payments        PaymentOrderPayment[]
   journalEntry    JournalEntry?       @relation(fields: [journalEntryId], references: [id])

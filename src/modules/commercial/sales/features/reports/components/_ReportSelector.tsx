@@ -10,15 +10,9 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select';
 import { Button } from '@/shared/components/ui/button';
-import { Calendar } from '@/shared/components/ui/calendar';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/shared/components/ui/popover';
-import { CalendarIcon, FileText } from 'lucide-react';
+import { Input } from '@/shared/components/ui/input';
+import { FileText } from 'lucide-react';
 import moment from 'moment';
-import { cn } from '@/shared/lib/utils';
 
 type ReportType = 'period' | 'customer' | 'product' | 'vat';
 
@@ -76,55 +70,21 @@ export function _ReportSelector({ onGenerate, loading }: Props) {
           {/* Fecha Desde */}
           <div className="space-y-2">
             <label className="text-sm font-medium">Desde</label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    'w-full justify-start text-left font-normal',
-                    !startDate && 'text-muted-foreground'
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {startDate ? moment(startDate).format('DD/MM/YYYY') : 'Seleccionar'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={startDate}
-                  onSelect={(date) => date && setStartDate(date)}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+            <Input
+              type="date"
+              value={moment(startDate).format('YYYY-MM-DD')}
+              onChange={(e) => setStartDate(new Date(e.target.value + 'T12:00:00'))}
+            />
           </div>
 
           {/* Fecha Hasta */}
           <div className="space-y-2">
             <label className="text-sm font-medium">Hasta</label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    'w-full justify-start text-left font-normal',
-                    !endDate && 'text-muted-foreground'
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {endDate ? moment(endDate).format('DD/MM/YYYY') : 'Seleccionar'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={endDate}
-                  onSelect={(date) => date && setEndDate(date)}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+            <Input
+              type="date"
+              value={moment(endDate).format('YYYY-MM-DD')}
+              onChange={(e) => setEndDate(new Date(e.target.value + 'T12:00:00'))}
+            />
           </div>
 
           {/* Botón Generar */}

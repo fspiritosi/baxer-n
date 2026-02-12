@@ -465,7 +465,12 @@ export async function createJournalEntryForPaymentOrder(
         fullNumber: true,
         date: true,
         totalAmount: true,
-        supplier: { select: { name: true } },
+        supplier: {
+          select: {
+            businessName: true,
+            tradeName: true,
+          }
+        },
         payments: {
           select: {
             amount: true,
@@ -490,7 +495,7 @@ export async function createJournalEntryForPaymentOrder(
       accountId: settings.payablesAccountId,
       debit: total,
       credit: 0,
-      description: `Orden de pago ${paymentOrder.fullNumber} - ${paymentOrder.supplier.name}`,
+      description: `Orden de pago ${paymentOrder.fullNumber} - ${paymentOrder.supplier.tradeName || paymentOrder.supplier.businessName}`,
     });
 
     // Haber: Caja/Banco (activo disminuye)

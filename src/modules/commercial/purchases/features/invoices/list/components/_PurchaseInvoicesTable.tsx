@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/shared/components/ui/dropdown-menu';
-import { MoreHorizontal, Eye, CheckCircle, XCircle } from 'lucide-react';
+import { MoreHorizontal, Eye, CheckCircle, XCircle, Pencil } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import moment from 'moment';
@@ -168,6 +168,7 @@ export function _PurchaseInvoicesTable({ initialData, searchParams }: PurchaseIn
       cell: ({ row }) => {
         const invoice = row.original;
         const isLoading = loading === invoice.id;
+        const canEdit = invoice.status === 'DRAFT';
         const canConfirm = invoice.status === 'DRAFT';
         const canCancel =
           invoice.status === 'DRAFT' || invoice.status === 'CONFIRMED';
@@ -190,6 +191,16 @@ export function _PurchaseInvoicesTable({ initialData, searchParams }: PurchaseIn
                 <Eye className="mr-2 h-4 w-4" />
                 Ver detalle
               </DropdownMenuItem>
+              {canEdit && (
+                <DropdownMenuItem
+                  onClick={() =>
+                    router.push(`/dashboard/commercial/purchases/${invoice.id}/edit`)
+                  }
+                >
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Editar
+                </DropdownMenuItem>
+              )}
               {canConfirm && (
                 <>
                   <DropdownMenuSeparator />

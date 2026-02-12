@@ -10,12 +10,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/shared/components/ui/dropdown-menu';
-import { MoreHorizontal, CheckCircle, Eye } from 'lucide-react';
+import { MoreHorizontal, CheckCircle, Eye, Download, Edit, Trash2 } from 'lucide-react';
 import { RECEIPT_STATUS_LABELS, RECEIPT_STATUS_BADGES } from '../../../../shared/validators';
 import type { ReceiptListItem } from '../../../../shared/types';
 import moment from 'moment';
-import { confirmReceipt } from '../../actions.server';
+import { confirmReceipt, deleteReceipt } from '../../actions.server';
 import { toast } from 'sonner';
+import { ReceiptDetailModal } from './_ReceiptDetailModal';
+import { EditReceiptModal } from './_EditReceiptModal';
 import { useState } from 'react';
 import {
   AlertDialog,
@@ -35,8 +37,12 @@ interface ReceiptsTableProps {
 
 export function ReceiptsTable({ receipts, onUpdate }: ReceiptsTableProps) {
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleConfirm = async () => {
     if (!selectedReceiptId) return;
@@ -51,6 +57,23 @@ export function ReceiptsTable({ receipts, onUpdate }: ReceiptsTableProps) {
     } finally {
       setIsConfirming(false);
       setConfirmDialogOpen(false);
+      setSelectedReceiptId(null);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedReceiptId) return;
+
+    setIsDeleting(true);
+    try {
+      await deleteReceipt(selectedReceiptId);
+      toast.success('Recibo eliminado correctamente');
+      onUpdate();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Error al eliminar recibo');
+    } finally {
+      setIsDeleting(false);
+      setDeleteDialogOpen(false);
       setSelectedReceiptId(null);
     }
   };
@@ -121,21 +144,58 @@ export function ReceiptsTable({ receipts, onUpdate }: ReceiptsTableProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  setSelectedReceiptId(receipt.id);
+                  setDetailModalOpen(true);
+                }}
+              >
                 <Eye className="mr-2 h-4 w-4" />
                 Ver Detalle
               </DropdownMenuItem>
 
+              <DropdownMenuItem
+                onClick={() => {
+                  window.open(`/api/receipts/${receipt.id}/pdf`, '_blank');
+                }}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Descargar PDF
+              </DropdownMenuItem>
+
               {receipt.status === 'DRAFT' && (
-                <DropdownMenuItem
-                  onClick={() => {
-                    setSelectedReceiptId(receipt.id);
-                    setConfirmDialogOpen(true);
-                  }}
-                >
-                  <CheckCircle className="mr-2 h-4 w-4" />
-                  Confirmar Recibo
-                </DropdownMenuItem>
+                <>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSelectedReceiptId(receipt.id);
+                      setEditModalOpen(true);
+                    }}
+                  >
+                    <Edit className="mr-2 h-4 w-4" />
+                    Editar
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSelectedReceiptId(receipt.id);
+                      setConfirmDialogOpen(true);
+                    }}
+                  >
+                    <CheckCircle className="mr-2 h-4 w-4" />
+                    Confirmar Recibo
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSelectedReceiptId(receipt.id);
+                      setDeleteDialogOpen(true);
+                    }}
+                    className="text-destructive"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Eliminar
+                  </DropdownMenuItem>
+                </>
               )}
             </DropdownMenuContent>
           </DropdownMenu>
@@ -148,6 +208,7 @@ export function ReceiptsTable({ receipts, onUpdate }: ReceiptsTableProps) {
     <>
       <DataTable<ReceiptListItem> columns={columns} data={receipts} totalRows={receipts.length} />
 
+      {/* Diálogo de Confirmación */}
       <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -165,6 +226,43 @@ export function ReceiptsTable({ receipts, onUpdate }: ReceiptsTableProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Diálogo de Eliminación */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar recibo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción eliminará permanentemente el recibo y todos sus registros asociados.
+              Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? 'Eliminando...' : 'Eliminar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Modal de Detalle */}
+      <ReceiptDetailModal
+        receiptId={selectedReceiptId}
+        open={detailModalOpen}
+        onOpenChange={setDetailModalOpen}
+      />
+
+      {/* Modal de Edición */}
+      <EditReceiptModal
+        receiptId={selectedReceiptId}
+        open={editModalOpen}
+        onOpenChange={setEditModalOpen}
+      />
     </>
   );
 }

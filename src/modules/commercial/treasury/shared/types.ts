@@ -269,7 +269,8 @@ export interface PaymentOrderWithDetails extends Record<string, unknown> {
   createdAt: Date;
   supplier: {
     id: string;
-    name: string;
+    businessName: string;
+    tradeName: string | null;
     taxId: string | null;
   };
   items: Array<{
@@ -310,7 +311,8 @@ export interface PaymentOrderListItem extends Record<string, unknown> {
   createdAt: Date;
   supplier: {
     id: string;
-    name: string;
+    businessName: string;
+    tradeName: string | null;
   };
   _count: {
     items: number;
