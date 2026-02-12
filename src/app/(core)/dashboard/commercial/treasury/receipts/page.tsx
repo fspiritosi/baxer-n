@@ -1,5 +1,5 @@
 import { type Metadata } from 'next';
-import { ReceiptsList } from '@/modules/commercial/treasury/features/receipts/list';
+import { ReceiptsList } from '@/modules/commercial/features/treasury/features/receipts/list';
 
 export const metadata: Metadata = {
   title: 'Recibos de Cobro | Tesorería',

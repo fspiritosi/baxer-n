@@ -1,4 +1,4 @@
-import { StockControl } from '@/modules/commercial/warehouses';
+import { StockControl } from '@/modules/commercial/features/warehouses';
 
 export default function StockControlPage() {
   return <StockControl />;

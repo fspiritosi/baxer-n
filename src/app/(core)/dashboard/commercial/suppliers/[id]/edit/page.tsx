@@ -1,4 +1,4 @@
-import { EditSupplier } from '@/modules/commercial/suppliers';
+import { EditSupplier } from '@/modules/commercial/features/suppliers';
 
 interface PageProps {
   params: Promise<{

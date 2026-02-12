@@ -1,4 +1,4 @@
-import { PurchaseInvoiceDetail } from '@/modules/commercial/purchases/features/invoices/detail';
+import { PurchaseInvoiceDetail } from '@/modules/commercial/features/purchases/features/invoices/detail';
 
 interface Props {
   params: Promise<{ id: string }>;

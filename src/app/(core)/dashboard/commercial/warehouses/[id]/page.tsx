@@ -1,4 +1,4 @@
-import { WarehouseDetail } from '@/modules/commercial/warehouses';
+import { WarehouseDetail } from '@/modules/commercial/features/warehouses';
 
 interface PageProps {
   params: Promise<{

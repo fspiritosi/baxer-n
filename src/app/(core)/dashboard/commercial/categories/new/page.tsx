@@ -1,4 +1,4 @@
-import { CreateCategory } from '@/modules/commercial/products/features/categories';
+import { CreateCategory } from '@/modules/commercial/features/products/features/categories';
 
 export default function NewCategoryPage() {
   return <CreateCategory />;

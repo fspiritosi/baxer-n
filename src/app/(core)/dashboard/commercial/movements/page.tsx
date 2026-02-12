@@ -1,4 +1,4 @@
-import { StockMovements } from '@/modules/commercial/warehouses';
+import { StockMovements } from '@/modules/commercial/features/warehouses';
 
 interface PageProps {
   searchParams: Promise<{

@@ -1,4 +1,4 @@
-import { PriceListsList } from '@/modules/commercial/products/features/price-lists/list';
+import { PriceListsList } from '@/modules/commercial/features/products/features/price-lists/list';
 
 export const metadata = {
   title: 'Listas de Precios | Commercial',

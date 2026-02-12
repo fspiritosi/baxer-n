@@ -1,4 +1,4 @@
-import { SalesReports } from '@/modules/commercial/sales/features/reports/SalesReports';
+import { SalesReports } from '@/modules/commercial/features/sales/features/reports/SalesReports';
 
 export default function SalesReportsPage() {
   return <SalesReports />;

@@ -1,4 +1,4 @@
-import { PurchaseInvoicesList } from '@/modules/commercial/purchases/features/invoices/list';
+import { PurchaseInvoicesList } from '@/modules/commercial/features/purchases/features/invoices/list';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
 
 interface Props {

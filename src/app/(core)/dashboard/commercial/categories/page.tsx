@@ -1,4 +1,4 @@
-import { CategoriesList } from '@/modules/commercial/products/features/categories';
+import { CategoriesList } from '@/modules/commercial/features/products/features/categories';
 
 export default function CategoriesPage() {
   return <CategoriesList />;

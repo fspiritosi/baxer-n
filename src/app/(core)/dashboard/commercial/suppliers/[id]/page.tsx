@@ -1,4 +1,4 @@
-import { SupplierDetail } from '@/modules/commercial/suppliers';
+import { SupplierDetail } from '@/modules/commercial/features/suppliers';
 
 interface PageProps {
   params: Promise<{

@@ -1,4 +1,4 @@
-import { EditWarehouse } from '@/modules/commercial/warehouses';
+import { EditWarehouse } from '@/modules/commercial/features/warehouses';
 
 interface PageProps {
   params: Promise<{

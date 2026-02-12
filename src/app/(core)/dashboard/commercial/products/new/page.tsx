@@ -1,4 +1,4 @@
-import { CreateProduct } from '@/modules/commercial/products/features/create';
+import { CreateProduct } from '@/modules/commercial/features/products/features/create';
 
 export const metadata = {
   title: 'Nuevo Producto | Commercial',

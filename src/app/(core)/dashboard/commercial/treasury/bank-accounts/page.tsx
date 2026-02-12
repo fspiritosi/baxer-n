@@ -1,6 +1,6 @@
 import { Metadata } from 'next';
 
-import { BankAccountsList } from '@/modules/commercial/treasury/features/bank-accounts/list';
+import { BankAccountsList } from '@/modules/commercial/features/treasury/features/bank-accounts/list';
 
 export const metadata: Metadata = {
   title: 'Cuentas Bancarias | Tesorería',

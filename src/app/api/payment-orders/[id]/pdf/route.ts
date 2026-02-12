@@ -12,7 +12,7 @@ import {
   generatePaymentOrderPDF,
   getPaymentOrderFileName,
   mapPaymentOrderDataForPDF,
-} from '@/modules/commercial/treasury/features/payment-orders/shared/pdf';
+} from '@/modules/commercial/features/treasury/features/payment-orders/shared/pdf';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

@@ -1,5 +1,5 @@
 import { type Metadata } from 'next';
-import { PaymentOrdersList } from '@/modules/commercial/treasury/features/payment-orders/list';
+import { PaymentOrdersList } from '@/modules/commercial/features/treasury/features/payment-orders/list';
 
 export const metadata: Metadata = {
   title: 'Órdenes de Pago | Tesorería',

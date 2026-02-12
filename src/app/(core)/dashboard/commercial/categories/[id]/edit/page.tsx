@@ -1,4 +1,4 @@
-import { EditCategory } from '@/modules/commercial/products/features/categories';
+import { EditCategory } from '@/modules/commercial/features/products/features/categories';
 
 interface PageProps {
   params: Promise<{

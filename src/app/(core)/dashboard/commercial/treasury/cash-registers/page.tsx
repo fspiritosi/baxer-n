@@ -1,6 +1,6 @@
 import { Metadata } from 'next';
 
-import { CashRegistersList } from '@/modules/commercial/treasury/features/cash-registers/list';
+import { CashRegistersList } from '@/modules/commercial/features/treasury/features/cash-registers/list';
 
 export const metadata: Metadata = {
   title: 'Cajas | Tesorería',

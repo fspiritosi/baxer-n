@@ -1,4 +1,4 @@
-import { PriceListDetail } from '@/modules/commercial/products/features/price-lists/detail';
+import { PriceListDetail } from '@/modules/commercial/features/products/features/price-lists/detail';
 
 export const metadata = {
   title: 'Detalle de Lista de Precios | Commercial',

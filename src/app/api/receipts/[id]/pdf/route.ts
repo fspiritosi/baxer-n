@@ -12,7 +12,7 @@ import {
   generateReceiptPDF,
   getReceiptFileName,
   mapReceiptDataForPDF,
-} from '@/modules/commercial/treasury/features/receipts/shared/pdf';
+} from '@/modules/commercial/features/treasury/features/receipts/shared/pdf';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

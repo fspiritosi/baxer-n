@@ -8,8 +8,8 @@ import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/shared/lib/prisma';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { logger } from '@/shared/lib/logger';
-import { generateInvoicePDF, getInvoiceFileName } from '@/modules/commercial/sales/shared/pdf/generator';
-import { mapInvoiceDataForPDF } from '@/modules/commercial/sales/shared/pdf/data-mapper';
+import { generateInvoicePDF, getInvoiceFileName } from '@/modules/commercial/features/sales/shared/pdf/generator';
+import { mapInvoiceDataForPDF } from '@/modules/commercial/features/sales/shared/pdf/data-mapper';
 
 export async function GET(
   request: NextRequest,

@@ -1,4 +1,4 @@
-import { EditProduct } from '@/modules/commercial/products/features/edit';
+import { EditProduct } from '@/modules/commercial/features/products/features/edit';
 
 export const metadata = {
   title: 'Editar Producto | Commercial',

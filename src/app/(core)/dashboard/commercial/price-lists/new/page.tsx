@@ -1,4 +1,4 @@
-import { CreatePriceList } from '@/modules/commercial/products/features/price-lists/create';
+import { CreatePriceList } from '@/modules/commercial/features/products/features/price-lists/create';
 
 export const metadata = {
   title: 'Nueva Lista de Precios | Commercial',

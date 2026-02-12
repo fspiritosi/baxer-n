@@ -1,4 +1,4 @@
-import { EditPriceList } from '@/modules/commercial/products/features/price-lists/edit';
+import { EditPriceList } from '@/modules/commercial/features/products/features/price-lists/edit';
 
 export const metadata = {
   title: 'Editar Lista de Precios | Commercial',

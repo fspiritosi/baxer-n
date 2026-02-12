@@ -1,4 +1,4 @@
-import { ProductsList } from '@/modules/commercial/products/features/list';
+import { ProductsList } from '@/modules/commercial/features/products/features/list';
 
 export const metadata = {
   title: 'Productos | Commercial',

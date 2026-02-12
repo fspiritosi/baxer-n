@@ -1,4 +1,4 @@
-import { EditPurchaseInvoice } from '@/modules/commercial/purchases/features/invoices/edit';
+import { EditPurchaseInvoice } from '@/modules/commercial/features/purchases/features/invoices/edit';
 
 interface PageProps {
   params: Promise<{

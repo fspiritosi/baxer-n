@@ -1,4 +1,4 @@
-import { InvoiceDetail } from '@/modules/commercial/sales/features/invoices/detail';
+import { InvoiceDetail } from '@/modules/commercial/features/sales/features/invoices/detail';
 
 interface InvoiceDetailPageProps {
   params: Promise<{ id: string }>;
