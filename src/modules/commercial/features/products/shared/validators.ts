@@ -13,6 +13,7 @@ const emptyStringToUndefined = z
   .optional()
   .transform((val) => (val === '' ? undefined : val));
 
+
 // ============================================
 // Category Validators
 // ============================================
@@ -42,8 +43,8 @@ export const createProductSchema = z.object({
   salePrice: z.coerce.number().min(0, 'El precio de venta debe ser mayor o igual a 0'),
   vatRate: z.coerce.number().min(0).max(100).optional(),
   trackStock: z.boolean().optional(),
-  minStock: z.coerce.number().min(0).optional().or(z.literal('')),
-  maxStock: z.coerce.number().min(0).optional().or(z.literal('')),
+  minStock: z.coerce.number().min(0).optional(),
+  maxStock: z.coerce.number().min(0).optional(),
   barcode: emptyStringToUndefined.pipe(z.string().max(50).optional()),
   internalCode: emptyStringToUndefined.pipe(z.string().max(50).optional()),
   brand: emptyStringToUndefined.pipe(z.string().max(100).optional()),

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { WarehouseType, StockMovementType } from '@/generated/prisma/enums';
 
+
 // ============================================
 // Warehouse Validators
 // ============================================
@@ -28,9 +29,7 @@ export const createStockMovementSchema = z.object({
   warehouseId: z.string().uuid('Debe seleccionar un almacén'),
   productId: z.string().uuid('Debe seleccionar un producto'),
   type: z.nativeEnum(StockMovementType),
-  quantity: z.coerce
-    .number()
-    .positive('La cantidad debe ser mayor a 0'),
+  quantity: z.coerce.number().positive('La cantidad debe ser mayor a 0'),
   referenceType: z.string().max(50).optional(),
   referenceId: z.string().uuid().optional(),
   notes: z.string().max(500).optional(),
@@ -46,9 +45,7 @@ export type CreateStockMovementFormData = z.infer<typeof createStockMovementSche
 export const stockAdjustmentSchema = z.object({
   warehouseId: z.string().uuid('Debe seleccionar un almacén'),
   productId: z.string().uuid('Debe seleccionar un producto'),
-  newQuantity: z.coerce
-    .number()
-    .min(0, 'La cantidad debe ser mayor o igual a 0'),
+  newQuantity: z.coerce.number().min(0, 'La cantidad debe ser mayor o igual a 0'),
   notes: z.string().max(500).optional(),
 });
 
@@ -62,9 +59,7 @@ export const stockTransferSchema = z.object({
   fromWarehouseId: z.string().uuid('Debe seleccionar almacén origen'),
   toWarehouseId: z.string().uuid('Debe seleccionar almacén destino'),
   productId: z.string().uuid('Debe seleccionar un producto'),
-  quantity: z.coerce
-    .number()
-    .positive('La cantidad debe ser mayor a 0'),
+  quantity: z.coerce.number().positive('La cantidad debe ser mayor a 0'),
   notes: z.string().max(500).optional(),
 }).refine(
   (data) => data.fromWarehouseId !== data.toWarehouseId,

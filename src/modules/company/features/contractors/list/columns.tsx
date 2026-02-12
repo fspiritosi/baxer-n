@@ -55,11 +55,14 @@ export function getColumns({ onEdit, onDelete, permissions }: ColumnsProps): Col
       accessorKey: 'taxCondition',
       header: ({ column }) => <DataTableColumnHeader column={column} title="Condición IVA" />,
       meta: { title: 'Condición IVA' },
-      cell: ({ row }) => (
-        <span data-testid={`contractor-taxCondition-${row.original.id}`}>
-          {customerTaxConditionLabels[row.getValue('taxCondition')]}
-        </span>
-      ),
+      cell: ({ row }) => {
+        const taxCondition = row.getValue('taxCondition') as keyof typeof customerTaxConditionLabels;
+        return (
+          <span data-testid={`contractor-taxCondition-${row.original.id}`}>
+            {customerTaxConditionLabels[taxCondition]}
+          </span>
+        );
+      },
     },
 
     // Email

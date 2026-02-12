@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { SupplierTaxCondition, SupplierStatus } from '@/generated/prisma/enums';
 
+
 export const createSupplierSchema = z.object({
   businessName: z.string().min(1, 'La razón social es requerida').max(200),
   tradeName: z.string().max(200).optional(),
@@ -18,7 +19,7 @@ export const createSupplierSchema = z.object({
   zipCode: z.string().max(20).optional(),
   country: z.string().max(100).optional(),
   paymentTermDays: z.coerce.number().int().min(0).max(365).optional(),
-  creditLimit: z.coerce.number().min(0).optional().or(z.literal('')),
+  creditLimit: z.coerce.number().min(0).optional(),
   contactName: z.string().max(100).optional(),
   contactPhone: z.string().max(50).optional(),
   contactEmail: z.string().email('Email inválido').optional().or(z.literal('')),
