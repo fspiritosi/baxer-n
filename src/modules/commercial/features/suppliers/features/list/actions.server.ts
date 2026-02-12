@@ -13,26 +13,60 @@ import {
 } from '../../shared/validators';
 import type { Supplier } from '../../shared/types';
 
+interface GetSuppliersParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+}
+
 /**
- * Obtiene el listado de proveedores de la empresa activa
+ * Obtiene el listado de proveedores de la empresa activa con paginación
  */
-export async function getSuppliers(): Promise<Supplier[]> {
+export async function getSuppliers(params: GetSuppliersParams = {}) {
+  const { page = 1, pageSize = 10, search } = params;
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
   try {
     const { userId } = await auth();
     if (!userId) throw new Error('No autenticado');
 
-    const companyId = await getActiveCompanyId();
-    if (!companyId) throw new Error('No se encontró empresa activa');
+    const where = {
+      companyId,
+      ...(search && {
+        OR: [
+          { businessName: { contains: search, mode: 'insensitive' as const } },
+          { tradeName: { contains: search, mode: 'insensitive' as const } },
+          { taxId: { contains: search, mode: 'insensitive' as const } },
+          { email: { contains: search, mode: 'insensitive' as const } },
+        ],
+      }),
+    };
 
-    const suppliers = await prisma.supplier.findMany({
-      where: { companyId },
-      orderBy: [{ status: 'asc' }, { businessName: 'asc' }],
-    });
+    const [suppliers, total] = await Promise.all([
+      prisma.supplier.findMany({
+        where,
+        orderBy: [{ status: 'asc' }, { businessName: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.supplier.count({ where }),
+    ]);
 
-    return suppliers.map((supplier) => ({
+    const data = suppliers.map((supplier) => ({
       ...supplier,
       creditLimit: supplier.creditLimit ? Number(supplier.creditLimit) : null,
     }));
+
+    return {
+      data,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
+      },
+    };
   } catch (error) {
     logger.error('Error al obtener proveedores', { data: { error } });
     throw new Error('Error al obtener proveedores');

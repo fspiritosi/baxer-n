@@ -1,24 +1,44 @@
+import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
+import { PermissionGuard } from '@/shared/components/common/PermissionGuard';
+import { getModulePermissions } from '@/shared/lib/permissions';
 import { getSuppliers } from './actions.server';
 import { _SuppliersTable } from './components/_SuppliersTable';
-import { checkPermission } from '@/shared/lib/permissions';
 
-export async function SuppliersList() {
-  await checkPermission('commercial.suppliers', 'view');
+interface Props {
+  searchParams?: DataTableSearchParams;
+}
 
-  const suppliers = await getSuppliers();
+export async function SuppliersList({ searchParams = {} }: Props) {
+  const page = searchParams.page ? parseInt(searchParams.page) : 1;
+  const search = searchParams.search;
+  const pageSize = searchParams.pageSize ? parseInt(searchParams.pageSize) : 10;
+
+  const [result, permissions] = await Promise.all([
+    getSuppliers({
+      page,
+      pageSize,
+      search,
+    }),
+    getModulePermissions('commercial.suppliers'),
+  ]);
 
   return (
-    <div className="flex flex-1 flex-col gap-4">
-      <div className="flex items-center justify-between">
+    <PermissionGuard module="commercial.suppliers" action="view" redirect>
+      <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">Proveedores</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-3xl font-bold tracking-tight">Proveedores</h1>
+          <p className="text-muted-foreground">
             Gestiona los proveedores de tu empresa
           </p>
         </div>
-      </div>
 
-      <_SuppliersTable suppliers={suppliers} />
-    </div>
+        <_SuppliersTable
+          data={result.data}
+          totalRows={result.pagination.total}
+          searchParams={searchParams}
+          permissions={permissions}
+        />
+      </div>
+    </PermissionGuard>
   );
 }
