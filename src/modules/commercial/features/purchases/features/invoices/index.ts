@@ -2,4 +2,4 @@
 export * from './create';
 export * from './list';
 export * from './edit';
-export * from './shared/types';
+export * from './shared/index';
