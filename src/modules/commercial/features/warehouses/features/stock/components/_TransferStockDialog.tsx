@@ -35,7 +35,7 @@ import { ArrowRight, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Warehouse, WarehouseStock } from '../../../shared/types';
-import { stockTransferSchema, type StockTransferFormData } from '../../../shared/validators';
+import { directStockTransferSchema, type DirectStockTransferFormData } from '../../../shared/validators';
 import { transferStock } from '../../list/actions.server';
 
 interface TransferStockDialogProps {
@@ -56,8 +56,8 @@ export function TransferStockDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const queryClient = useQueryClient();
 
-  const form = useForm<StockTransferFormData>({
-    resolver: zodResolver(stockTransferSchema),
+  const form = useForm<DirectStockTransferFormData>({
+    resolver: zodResolver(directStockTransferSchema),
     defaultValues: {
       fromWarehouseId,
       toWarehouseId: '',
@@ -71,7 +71,7 @@ export function TransferStockDialog({
   const toWarehouseId = form.watch('toWarehouseId');
   const isExceedingAvailable = Number(quantity) > stock.availableQty;
 
-  const handleSubmit = async (data: StockTransferFormData) => {
+  const handleSubmit = async (data: DirectStockTransferFormData) => {
     setIsSubmitting(true);
     try {
       await transferStock(data);

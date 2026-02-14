@@ -1,52 +1,44 @@
-import { Button } from '@/shared/components/ui/button';
-import { Plus } from 'lucide-react';
-import Link from 'next/link';
+import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
+import { PermissionGuard } from '@/shared/components/common/PermissionGuard';
+import { getModulePermissions } from '@/shared/lib/permissions';
 import { getWarehouses } from './actions.server';
-import { WarehousesTable } from './components/_WarehousesTable';
+import { _WarehousesTable } from './components/_WarehousesTable';
 
 interface WarehousesListProps {
-  searchParams?: {
-    page?: string;
-    pageSize?: string;
-    search?: string;
-    isActive?: string;
-  };
+  searchParams?: DataTableSearchParams;
 }
 
-export async function WarehousesList({ searchParams }: WarehousesListProps) {
-  const page = Number(searchParams?.page) || 1;
-  const pageSize = Number(searchParams?.pageSize) || 10;
-  const search = searchParams?.search || '';
-  const isActive = searchParams?.isActive === 'true' ? true : searchParams?.isActive === 'false' ? false : undefined;
+export async function WarehousesList({ searchParams = {} }: WarehousesListProps) {
+  const page = searchParams.page ? parseInt(searchParams.page) : 1;
+  const pageSize = searchParams.pageSize ? parseInt(searchParams.pageSize) : 10;
+  const search = searchParams.search;
 
-  const result = await getWarehouses({
-    page,
-    pageSize,
-    search,
-    isActive,
-  });
+  const [result, permissions] = await Promise.all([
+    getWarehouses({
+      page,
+      pageSize,
+      search,
+    }),
+    getModulePermissions('commercial.warehouses'),
+  ]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <PermissionGuard module="commercial.warehouses" action="view" redirect>
+      <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Almacenes</h1>
           <p className="text-muted-foreground">
             Gestiona los almacenes y depósitos de la empresa
           </p>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/commercial/warehouses/new">
-            <Plus className="mr-2 h-4 w-4" />
-            Nuevo Almacén
-          </Link>
-        </Button>
-      </div>
 
-      <WarehousesTable
-        data={result.data}
-        pagination={result.pagination}
-      />
-    </div>
+        <_WarehousesTable
+          data={result.data}
+          totalRows={result.pagination.total}
+          searchParams={searchParams}
+          permissions={permissions}
+        />
+      </div>
+    </PermissionGuard>
   );
 }

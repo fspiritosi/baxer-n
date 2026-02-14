@@ -44,7 +44,7 @@ import moment from 'moment';
 import { cn } from '@/shared/lib/utils';
 
 import { createStockTransfer } from '../actions.server';
-import { stockTransferSchema } from '../validators';
+import { stockTransferSchema } from '../../../shared/validators';
 
 type FormData = z.infer<typeof stockTransferSchema>;
 

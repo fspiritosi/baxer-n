@@ -9,13 +9,13 @@ import {
   createWarehouseSchema,
   updateWarehouseSchema,
   createStockMovementSchema,
-  stockAdjustmentSchema,
-  stockTransferSchema,
+  setStockQuantitySchema,
+  directStockTransferSchema,
   type CreateWarehouseFormData,
   type UpdateWarehouseFormData,
   type CreateStockMovementFormData,
-  type StockAdjustmentFormData,
-  type StockTransferFormData,
+  type SetStockQuantityFormData,
+  type DirectStockTransferFormData,
 } from '../../shared/validators';
 import type { Warehouse, WarehouseStock, StockMovement } from '../../shared/types';
 
@@ -623,7 +623,7 @@ export async function createStockMovement(data: CreateStockMovementFormData): Pr
 // Stock Adjustment
 // ============================================
 
-export async function adjustStock(data: StockAdjustmentFormData): Promise<void> {
+export async function adjustStock(data: SetStockQuantityFormData): Promise<void> {
   const { userId } = await auth();
   if (!userId) {
     throw new Error('No autenticado');
@@ -634,7 +634,7 @@ export async function adjustStock(data: StockAdjustmentFormData): Promise<void> 
     throw new Error('No se encontró empresa activa');
   }
 
-  const validatedData = stockAdjustmentSchema.parse(data);
+  const validatedData = setStockQuantitySchema.parse(data);
 
   try {
     const [warehouse, product] = await Promise.all([
@@ -721,7 +721,7 @@ export async function adjustStock(data: StockAdjustmentFormData): Promise<void> 
 // Stock Transfer
 // ============================================
 
-export async function transferStock(data: StockTransferFormData): Promise<void> {
+export async function transferStock(data: DirectStockTransferFormData): Promise<void> {
   const { userId } = await auth();
   if (!userId) {
     throw new Error('No autenticado');
@@ -732,7 +732,7 @@ export async function transferStock(data: StockTransferFormData): Promise<void> 
     throw new Error('No se encontró empresa activa');
   }
 
-  const validatedData = stockTransferSchema.parse(data);
+  const validatedData = directStockTransferSchema.parse(data);
 
   try {
     const [fromWarehouse, toWarehouse, product] = await Promise.all([

@@ -1,24 +1,44 @@
-import { checkPermission } from '@/shared/lib/permissions';
+import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
+import { PermissionGuard } from '@/shared/components/common/PermissionGuard';
+import { getModulePermissions } from '@/shared/lib/permissions';
 import { getPriceLists } from './actions.server';
 import { _PriceListsTable } from './components/_PriceListsTable';
 
-export async function PriceListsList() {
-  await checkPermission('commercial.products', 'read');
+interface PriceListsListProps {
+  searchParams?: DataTableSearchParams;
+}
 
-  const priceLists = await getPriceLists();
+export async function PriceListsList({ searchParams = {} }: PriceListsListProps) {
+  const page = searchParams.page ? parseInt(searchParams.page) : 1;
+  const pageSize = searchParams.pageSize ? parseInt(searchParams.pageSize) : 10;
+  const search = searchParams.search;
+
+  const [result, permissions] = await Promise.all([
+    getPriceLists({
+      page,
+      pageSize,
+      search,
+    }),
+    getModulePermissions('commercial.products'),
+  ]);
 
   return (
-    <div className="flex flex-1 flex-col gap-4">
-      <div className="flex items-center justify-between">
+    <PermissionGuard module="commercial.products" action="view" redirect>
+      <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">Listas de Precios</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-3xl font-bold tracking-tight">Listas de Precios</h1>
+          <p className="text-muted-foreground">
             Gestión de listas de precios y asignación de precios por producto
           </p>
         </div>
-      </div>
 
-      <_PriceListsTable priceLists={priceLists} />
-    </div>
+        <_PriceListsTable
+          data={result.data}
+          totalRows={result.pagination.total}
+          searchParams={searchParams}
+          permissions={permissions}
+        />
+      </div>
+    </PermissionGuard>
   );
 }

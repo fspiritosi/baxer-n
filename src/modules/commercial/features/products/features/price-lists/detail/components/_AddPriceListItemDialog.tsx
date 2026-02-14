@@ -67,8 +67,8 @@ export function _AddPriceListItemDialog({ priceListId }: AddPriceListItemDialogP
   const loadProducts = async () => {
     setLoading(true);
     try {
-      const data = await getProducts();
-      setProducts(data.filter((p) => p.status === 'ACTIVE'));
+      const result = await getProducts();
+      setProducts(result.data.filter((p) => p.status === 'ACTIVE'));
     } catch (error) {
       logger.error('Error al cargar productos', { data: { error } });
       toast.error('Error al cargar productos');

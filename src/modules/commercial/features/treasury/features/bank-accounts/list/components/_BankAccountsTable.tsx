@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { MoreHorizontal, Pencil, Power, PowerOff, Lock, ArrowLeftRight } from 'lucide-react';
+import Link from 'next/link';
 import moment from 'moment';
 import { toast } from 'sonner';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -172,9 +173,11 @@ export function _BankAccountsTable({ bankAccounts, onRefresh }: Props) {
                     Editar
                   </DropdownMenuItem>
 
-                  <DropdownMenuItem disabled>
-                    <ArrowLeftRight className="mr-2 h-4 w-4" />
-                    Ver Movimientos
+                  <DropdownMenuItem asChild>
+                    <Link href={`/dashboard/commercial/treasury/bank-accounts/${account.id}`}>
+                      <ArrowLeftRight className="mr-2 h-4 w-4" />
+                      Ver Movimientos
+                    </Link>
                   </DropdownMenuItem>
 
                   <DropdownMenuSeparator />

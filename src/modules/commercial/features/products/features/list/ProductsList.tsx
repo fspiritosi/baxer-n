@@ -23,7 +23,7 @@ export async function ProductsList({ searchParams = {} }: Props) {
   ]);
 
   return (
-    <PermissionGuard module="commercial.products" action="read" redirect>
+    <PermissionGuard module="commercial.products" action="view" redirect>
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Productos</h1>

@@ -8,8 +8,14 @@ import { revalidatePath } from 'next/cache';
 import { Prisma } from '@/generated/prisma/client';
 import { bankMovementSchema, type BankMovementFormData } from '../../shared/validators';
 
+// Tipo para el cliente de transacción de Prisma
+type PrismaTransactionClient = Omit<
+  typeof prisma,
+  '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'
+>;
+
 /**
- * Crea un nuevo movimiento bancario
+ * Crea un nuevo movimiento bancario y genera asiento contable
  */
 export async function createBankMovement(data: BankMovementFormData) {
   const { userId } = await auth();
@@ -22,7 +28,7 @@ export async function createBankMovement(data: BankMovementFormData) {
     // Validar datos
     const validated = bankMovementSchema.parse(data);
 
-    // Verificar que la cuenta existe y está activa
+    // Verificar que la cuenta bancaria existe y está activa
     const bankAccount = await prisma.bankAccount.findFirst({
       where: {
         id: validated.bankAccountId,
@@ -34,6 +40,7 @@ export async function createBankMovement(data: BankMovementFormData) {
         bankName: true,
         accountNumber: true,
         balance: true,
+        accountId: true,
       },
     });
 
@@ -41,19 +48,35 @@ export async function createBankMovement(data: BankMovementFormData) {
       throw new Error('Cuenta bancaria no encontrada o inactiva');
     }
 
-    const amount = new Prisma.Decimal(validated.amount);
+    // Verificar que la cuenta contable contrapartida existe
+    const counterpartAccount = await prisma.account.findFirst({
+      where: {
+        id: validated.accountId,
+        companyId,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+      },
+    });
 
-    // Crear movimiento y actualizar saldo en transacción
+    if (!counterpartAccount) {
+      throw new Error('Cuenta contable no encontrada o inactiva');
+    }
+
+    const amount = new Prisma.Decimal(validated.amount);
+    const isIncome = ['DEPOSIT', 'TRANSFER_IN', 'INTEREST'].includes(validated.type);
+
+    // Crear movimiento, actualizar saldo y generar asiento en transacción
     const movement = await prisma.$transaction(async (tx) => {
       // Calcular nuevo saldo
       let newBalance = bankAccount.balance;
 
-      // Movimientos que aumentan el saldo
-      if (['DEPOSIT', 'TRANSFER_IN', 'INTEREST'].includes(validated.type)) {
+      if (isIncome) {
         newBalance = bankAccount.balance.add(amount);
-      }
-      // Movimientos que disminuyen el saldo
-      else if (['WITHDRAWAL', 'TRANSFER_OUT', 'CHECK', 'DEBIT', 'FEE'].includes(validated.type)) {
+      } else if (['WITHDRAWAL', 'TRANSFER_OUT', 'CHECK', 'DEBIT', 'FEE'].includes(validated.type)) {
         newBalance = bankAccount.balance.sub(amount);
       }
 
@@ -78,6 +101,24 @@ export async function createBankMovement(data: BankMovementFormData) {
         data: { balance: newBalance },
       });
 
+      // Generar asiento contable si la cuenta bancaria tiene cuenta contable vinculada
+      if (bankAccount.accountId) {
+        await createJournalEntryForBankMovement(
+          {
+            companyId,
+            date: validated.date,
+            description: validated.description,
+            amount: parseFloat(validated.amount),
+            isIncome,
+            bankAccountId: bankAccount.accountId,
+            counterpartAccountId: validated.accountId,
+            bankName: bankAccount.bankName,
+            accountNumber: bankAccount.accountNumber,
+          },
+          tx
+        );
+      }
+
       return newMovement;
     });
 
@@ -87,6 +128,7 @@ export async function createBankMovement(data: BankMovementFormData) {
         type: movement.type,
         amount: validated.amount,
         bankAccount: `${bankAccount.bankName} - ${bankAccount.accountNumber}`,
+        counterpartAccount: `${counterpartAccount.code} - ${counterpartAccount.name}`,
       },
     });
 
@@ -100,6 +142,100 @@ export async function createBankMovement(data: BankMovementFormData) {
     }
     throw new Error('Error al crear movimiento bancario');
   }
+}
+
+/**
+ * Genera asiento contable para un movimiento bancario manual
+ */
+async function createJournalEntryForBankMovement(
+  input: {
+    companyId: string;
+    date: Date;
+    description: string;
+    amount: number;
+    isIncome: boolean;
+    bankAccountId: string;
+    counterpartAccountId: string;
+    bankName: string;
+    accountNumber: string;
+  },
+  tx: PrismaTransactionClient
+) {
+  const { companyId, date, description, amount, isIncome, bankAccountId, counterpartAccountId, bankName, accountNumber } = input;
+
+  // Obtener settings para el siguiente número de asiento
+  const settings = await tx.accountingSettings.findUnique({
+    where: { companyId },
+    select: { lastEntryNumber: true },
+  });
+
+  if (!settings) {
+    logger.warn('No se encontró configuración contable, no se generará asiento', {
+      data: { companyId },
+    });
+    return;
+  }
+
+  const nextNumber = settings.lastEntryNumber + 1;
+  const bankLabel = `${bankName} - ${accountNumber}`;
+
+  // Crear asiento:
+  // Ingreso (DEPOSIT, TRANSFER_IN, INTEREST):
+  //   Debe: Cuenta bancaria (activo aumenta)
+  //   Haber: Cuenta contrapartida
+  // Egreso (WITHDRAWAL, TRANSFER_OUT, CHECK, DEBIT, FEE):
+  //   Debe: Cuenta contrapartida
+  //   Haber: Cuenta bancaria (activo disminuye)
+  const entry = await tx.journalEntry.create({
+    data: {
+      companyId,
+      number: nextNumber,
+      date,
+      description: `Mov. bancario - ${description} (${bankLabel})`,
+      createdBy: 'system',
+      lines: {
+        create: isIncome
+          ? [
+              {
+                accountId: bankAccountId,
+                debit: new Prisma.Decimal(amount),
+                credit: new Prisma.Decimal(0),
+                description: `${bankLabel} - ${description}`,
+              },
+              {
+                accountId: counterpartAccountId,
+                debit: new Prisma.Decimal(0),
+                credit: new Prisma.Decimal(amount),
+                description: description,
+              },
+            ]
+          : [
+              {
+                accountId: counterpartAccountId,
+                debit: new Prisma.Decimal(amount),
+                credit: new Prisma.Decimal(0),
+                description: description,
+              },
+              {
+                accountId: bankAccountId,
+                debit: new Prisma.Decimal(0),
+                credit: new Prisma.Decimal(amount),
+                description: `${bankLabel} - ${description}`,
+              },
+            ],
+      },
+    },
+  });
+
+  // Actualizar el último número de asiento
+  await tx.accountingSettings.update({
+    where: { companyId },
+    data: { lastEntryNumber: nextNumber },
+  });
+
+  logger.info('Asiento contable generado para movimiento bancario', {
+    data: { entryId: entry.id, number: nextNumber },
+  });
 }
 
 /**
@@ -139,6 +275,35 @@ export async function getBankAccountMovements(bankAccountId: string, limit = 50)
   } catch (error) {
     logger.error('Error al obtener movimientos bancarios', { data: { error, bankAccountId } });
     throw new Error('Error al obtener movimientos bancarios');
+  }
+}
+
+/**
+ * Obtiene las cuentas contables disponibles para movimientos bancarios
+ */
+export async function getAccountsForBankMovement() {
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const accounts = await prisma.account.findMany({
+      where: {
+        companyId,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        type: true,
+      },
+      orderBy: { code: 'asc' },
+    });
+
+    return accounts;
+  } catch (error) {
+    logger.error('Error al obtener cuentas contables', { data: { error } });
+    return [];
   }
 }
 

@@ -1,0 +1,66 @@
+import { getInvoiceById } from '../list/actions.server';
+import {
+  getActiveCustomers,
+  getActivePointsOfSale,
+  getActiveProducts,
+} from '../create/helpers.server';
+import { InvoiceForm } from '../create/components/_InvoiceForm';
+import { redirect } from 'next/navigation';
+
+interface EditInvoiceProps {
+  id: string;
+}
+
+export async function EditInvoice({ id }: EditInvoiceProps) {
+  const [invoice, customers, pointsOfSale, products] = await Promise.all([
+    getInvoiceById(id),
+    getActiveCustomers(),
+    getActivePointsOfSale(),
+    getActiveProducts(),
+  ]);
+
+  // Solo se pueden editar facturas en borrador
+  if (invoice.status !== 'DRAFT') {
+    redirect(`/dashboard/commercial/invoices/${id}`);
+  }
+
+  // Preparar datos iniciales para el formulario
+  const initialData = {
+    customerId: invoice.customer.id,
+    pointOfSaleId: invoice.pointOfSale.id,
+    voucherType: invoice.voucherType as any,
+    issueDate: new Date(invoice.issueDate),
+    dueDate: invoice.dueDate ? new Date(invoice.dueDate) : undefined,
+    notes: invoice.notes || '',
+    internalNotes: invoice.internalNotes || '',
+    lines: invoice.lines.map((line) => ({
+      productId: line.product.id,
+      description: line.description,
+      quantity: Number(line.quantity).toString(),
+      unitPrice: Number(line.unitPrice).toString(),
+      vatRate: Number(line.vatRate).toString(),
+    })),
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold tracking-tight">
+          Editar Factura {invoice.fullNumber}
+        </h2>
+        <p className="text-muted-foreground">
+          Modifica los datos de la factura en borrador
+        </p>
+      </div>
+
+      <InvoiceForm
+        customers={customers}
+        pointsOfSale={pointsOfSale}
+        products={products}
+        mode="edit"
+        invoiceId={id}
+        initialData={initialData}
+      />
+    </div>
+  );
+}

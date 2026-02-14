@@ -63,8 +63,10 @@ export async function InvoiceDetail({ id }: InvoiceDetailProps) {
             </a>
           </Button>
           {invoice.status === 'DRAFT' && (
-            <Button variant="outline" disabled>
-              Editar
+            <Button variant="outline" asChild>
+              <Link href={`/dashboard/commercial/invoices/${invoice.id}/edit`}>
+                Editar
+              </Link>
             </Button>
           )}
         </div>

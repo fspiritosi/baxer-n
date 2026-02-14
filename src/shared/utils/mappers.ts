@@ -14,6 +14,7 @@ import type {
   Gender,
   IdentityDocumentType,
   MaritalStatus,
+  SupplierTaxCondition,
   TerminationReason,
   UnionAffiliationStatus,
   VehicleCondition,
@@ -52,6 +53,14 @@ export const customerTaxConditionLabels: Record<CustomerTaxCondition, string> = 
   RESPONSABLE_INSCRIPTO: 'Responsable Inscripto',
   MONOTRIBUTISTA: 'Monotributista',
   EXENTO: 'Exento',
+  CONSUMIDOR_FINAL: 'Consumidor Final',
+};
+
+export const supplierTaxConditionLabels: Record<SupplierTaxCondition, string> = {
+  RESPONSABLE_INSCRIPTO: 'Responsable Inscripto',
+  MONOTRIBUTISTA: 'Monotributista',
+  EXENTO: 'Exento',
+  NO_RESPONSABLE: 'No Responsable',
   CONSUMIDOR_FINAL: 'Consumidor Final',
 };
 

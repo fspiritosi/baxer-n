@@ -23,7 +23,7 @@ import {
 import { Input } from '@/shared/components/ui/input';
 import { Textarea } from '@/shared/components/ui/textarea';
 import { Plus, Trash2 } from 'lucide-react';
-import { createInvoice, getAllowedVoucherTypesForCustomer } from '../../list/actions.server';
+import { createInvoice, updateInvoice, getAllowedVoucherTypesForCustomer } from '../../list/actions.server';
 import { invoiceFormSchema, VOUCHER_TYPE_LABELS } from '../../shared/validators';
 import { z } from 'zod';
 import moment from 'moment';
@@ -53,17 +53,21 @@ interface InvoiceFormProps {
     vatRate: any;
     trackStock: boolean;
   }>;
+  mode?: 'create' | 'edit';
+  invoiceId?: string;
+  initialData?: FormInput;
 }
 
-export function InvoiceForm({ customers, pointsOfSale, products }: InvoiceFormProps) {
+export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create', invoiceId, initialData }: InvoiceFormProps) {
   const router = useRouter();
+  const isEdit = mode === 'edit';
   const [totals, setTotals] = useState({ subtotal: 0, vatAmount: 0, total: 0 });
   const [allowedVoucherTypes, setAllowedVoucherTypes] = useState<VoucherType[] | null>(null);
   const [loadingVoucherTypes, setLoadingVoucherTypes] = useState(false);
 
   const form = useForm<FormInput>({
     resolver: zodResolver(invoiceFormSchema),
-    defaultValues: {
+    defaultValues: initialData || {
       customerId: '',
       pointOfSaleId: '',
       voucherType: 'FACTURA_B',
@@ -172,9 +176,15 @@ export function InvoiceForm({ customers, pointsOfSale, products }: InvoiceFormPr
         return;
       }
 
-      await createInvoice(data);
-      toast.success('Factura creada correctamente');
-      router.push('/dashboard/commercial/invoices');
+      if (isEdit && invoiceId) {
+        await updateInvoice(invoiceId, data);
+        toast.success('Factura actualizada correctamente');
+        router.push(`/dashboard/commercial/invoices/${invoiceId}`);
+      } else {
+        await createInvoice(data);
+        toast.success('Factura creada correctamente');
+        router.push('/dashboard/commercial/invoices');
+      }
       router.refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Ocurrió un error');
@@ -220,7 +230,7 @@ export function InvoiceForm({ customers, pointsOfSale, products }: InvoiceFormPr
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Punto de Venta</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value} disabled={isEdit}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Seleccionar punto de venta" />
@@ -534,7 +544,9 @@ export function InvoiceForm({ customers, pointsOfSale, products }: InvoiceFormPr
             Cancelar
           </Button>
           <Button type="submit" disabled={form.formState.isSubmitting}>
-            {form.formState.isSubmitting ? 'Creando...' : 'Crear Factura'}
+            {form.formState.isSubmitting
+              ? (isEdit ? 'Guardando...' : 'Creando...')
+              : (isEdit ? 'Guardar Cambios' : 'Crear Factura')}
           </Button>
         </div>
       </form>

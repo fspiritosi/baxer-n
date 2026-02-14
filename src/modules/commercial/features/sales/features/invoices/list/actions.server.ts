@@ -599,7 +599,86 @@ export async function getAllowedVoucherTypesForCustomer(customerId: string) {
   }
 }
 
-// Anular factura
+// Actualizar factura en borrador
+export async function updateInvoice(id: string, data: unknown) {
+  const { userId: authUserId } = await auth();
+  if (!authUserId) throw new Error('No autenticado');
+  const userId = authUserId;
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const validatedData = createInvoiceSchema.parse(data);
+
+    // Verificar que la factura existe y está en borrador
+    const invoice = await prisma.salesInvoice.findFirst({
+      where: { id, companyId, status: 'DRAFT' },
+    });
+
+    if (!invoice) {
+      throw new Error('Factura no encontrada o no está en borrador');
+    }
+
+    // Calcular totales
+    let invoiceSubtotal = 0;
+    let invoiceVatAmount = 0;
+
+    const linesData = validatedData.lines.map((line) => {
+      const amounts = calculateLineAmounts(line.quantity, line.unitPrice, line.vatRate);
+      invoiceSubtotal += amounts.subtotal;
+      invoiceVatAmount += amounts.vatAmount;
+
+      return {
+        productId: line.productId,
+        description: line.description,
+        quantity: new Prisma.Decimal(line.quantity),
+        unitPrice: new Prisma.Decimal(line.unitPrice),
+        vatRate: new Prisma.Decimal(line.vatRate),
+        vatAmount: new Prisma.Decimal(amounts.vatAmount),
+        subtotal: new Prisma.Decimal(amounts.subtotal),
+        total: new Prisma.Decimal(amounts.total),
+      };
+    });
+
+    const invoiceTotal = invoiceSubtotal + invoiceVatAmount;
+
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.salesInvoiceLine.deleteMany({ where: { invoiceId: id } });
+
+      return tx.salesInvoice.update({
+        where: { id },
+        data: {
+          customerId: validatedData.customerId,
+          voucherType: validatedData.voucherType as any,
+          issueDate: validatedData.issueDate,
+          dueDate: validatedData.dueDate,
+          subtotal: new Prisma.Decimal(invoiceSubtotal),
+          vatAmount: new Prisma.Decimal(invoiceVatAmount),
+          total: new Prisma.Decimal(invoiceTotal),
+          notes: validatedData.notes,
+          internalNotes: validatedData.internalNotes,
+          lines: { create: linesData },
+        },
+        include: { lines: true, customer: true, pointOfSale: true },
+      });
+    });
+
+    logger.info('Factura actualizada', {
+      data: { invoiceId: id, fullNumber: invoice.fullNumber, companyId, userId },
+    });
+
+    revalidatePath('/dashboard/commercial/invoices');
+    revalidatePath(`/dashboard/commercial/invoices/${id}`);
+    return result;
+  } catch (error) {
+    logger.error('Error al actualizar factura', { data: { id, companyId, error } });
+    if (error instanceof Error) throw error;
+    throw new Error('Error al actualizar la factura');
+  }
+}
+
+// Anular factura (con devolución de stock si estaba confirmada)
 export async function cancelInvoice(id: string) {
   const { userId: authUserId } = await auth();
   if (!authUserId) throw new Error('No autenticado');
@@ -609,13 +688,15 @@ export async function cancelInvoice(id: string) {
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    // Verificar que la factura existe y no está ya anulada
     const invoice = await prisma.salesInvoice.findFirst({
-      where: {
-        id: id,
-        companyId: companyId,
-        status: {
-          not: 'CANCELLED',
+      where: { id, companyId, status: { not: 'CANCELLED' } },
+      include: {
+        lines: {
+          include: {
+            product: {
+              select: { id: true, trackStock: true },
+            },
+          },
         },
       },
     });
@@ -624,18 +705,69 @@ export async function cancelInvoice(id: string) {
       throw new Error('Factura no encontrada o ya está anulada');
     }
 
-    // Anular factura
-    const result = await prisma.salesInvoice.update({
-      where: { id: id },
-      data: {
-        status: 'CANCELLED',
-      },
+    const wasConfirmed = invoice.status !== 'DRAFT';
+
+    const result = await prisma.$transaction(async (tx) => {
+      const updatedInvoice = await tx.salesInvoice.update({
+        where: { id },
+        data: { status: 'CANCELLED' },
+      });
+
+      // Revertir stock si fue confirmada
+      if (wasConfirmed) {
+        for (const line of invoice.lines) {
+          if (line.product.trackStock) {
+            const stockMovement = await tx.stockMovement.findFirst({
+              where: {
+                referenceId: invoice.id,
+                referenceType: 'sales_invoice',
+                productId: line.productId,
+              },
+            });
+
+            if (stockMovement) {
+              await tx.warehouseStock.upsert({
+                where: {
+                  warehouseId_productId: {
+                    warehouseId: stockMovement.warehouseId,
+                    productId: line.productId,
+                  },
+                },
+                update: { quantity: { increment: line.quantity } },
+                create: {
+                  warehouseId: stockMovement.warehouseId,
+                  productId: line.productId,
+                  quantity: line.quantity,
+                },
+              });
+
+              await tx.stockMovement.create({
+                data: {
+                  companyId,
+                  productId: line.productId,
+                  warehouseId: stockMovement.warehouseId,
+                  type: 'ADJUSTMENT',
+                  quantity: line.quantity,
+                  referenceType: 'sales_invoice_cancel',
+                  referenceId: invoice.id,
+                  notes: `Anulación de factura ${invoice.fullNumber}`,
+                  date: new Date(),
+                  createdBy: userId,
+                },
+              });
+            }
+          }
+        }
+      }
+
+      return updatedInvoice;
     });
 
     logger.info('Factura anulada', {
       data: {
         invoiceId: id,
         fullNumber: invoice.fullNumber,
+        stockRestored: wasConfirmed,
         companyId,
         userId,
       },
@@ -643,16 +775,11 @@ export async function cancelInvoice(id: string) {
 
     revalidatePath('/dashboard/commercial/invoices');
     revalidatePath(`/dashboard/commercial/invoices/${id}`);
+    revalidatePath('/dashboard/commercial/stock');
     return result;
   } catch (error) {
-    logger.error('Error al anular factura', {
-      data: { id, companyId, error },
-    });
-
-    if (error instanceof Error) {
-      throw error;
-    }
-
+    logger.error('Error al anular factura', { data: { id, companyId, error } });
+    if (error instanceof Error) throw error;
     throw new Error('Error al anular la factura');
   }
 }

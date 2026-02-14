@@ -45,12 +45,13 @@ export function MovementFilters() {
     queryFn: () => getWarehouses(),
   });
 
-  const { data: products = [] } = useQuery({
+  const { data: productsData } = useQuery({
     queryKey: ['products-for-filter'],
     queryFn: () => getProducts(),
   });
 
   const warehouses = warehousesData?.data || [];
+  const products = productsData?.data || [];
 
   const handleApplyFilters = () => {
     const params = new URLSearchParams();

@@ -27,7 +27,7 @@ import { Badge } from '@/shared/components/ui/badge';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import type { WarehouseStock } from '../../../shared/types';
-import { stockAdjustmentSchema, type StockAdjustmentFormData } from '../../../shared/validators';
+import { setStockQuantitySchema, type SetStockQuantityFormData } from '../../../shared/validators';
 import { adjustStock } from '../../list/actions.server';
 
 interface AdjustStockDialogProps {
@@ -46,8 +46,8 @@ export function AdjustStockDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const queryClient = useQueryClient();
 
-  const form = useForm<StockAdjustmentFormData>({
-    resolver: zodResolver(stockAdjustmentSchema),
+  const form = useForm<SetStockQuantityFormData>({
+    resolver: zodResolver(setStockQuantitySchema),
     defaultValues: {
       warehouseId,
       productId: stock.productId,
@@ -60,7 +60,7 @@ export function AdjustStockDialog({
   const newQuantity = form.watch('newQuantity');
   const difference = Number(newQuantity || 0) - currentQuantity;
 
-  const handleSubmit = async (data: StockAdjustmentFormData) => {
+  const handleSubmit = async (data: SetStockQuantityFormData) => {
     setIsSubmitting(true);
     try {
       await adjustStock(data);

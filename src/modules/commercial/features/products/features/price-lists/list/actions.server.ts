@@ -21,7 +21,14 @@ import type { PriceList, PriceListItem } from '../../../shared/types';
 // Price Lists CRUD
 // ============================================
 
-export async function getPriceLists(): Promise<PriceList[]> {
+interface GetPriceListsParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+}
+
+export async function getPriceLists(params: GetPriceListsParams = {}) {
+  const { page = 1, pageSize = 10, search } = params;
   const { userId } = await auth();
   if (!userId) {
     throw new Error('No autenticado');
@@ -33,17 +40,40 @@ export async function getPriceLists(): Promise<PriceList[]> {
   }
 
   try {
-    const priceLists = await prisma.priceList.findMany({
-      where: { companyId },
-      include: {
-        _count: {
-          select: { items: true },
-        },
-      },
-      orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
-    });
+    const where = {
+      companyId,
+      ...(search && {
+        OR: [
+          { name: { contains: search, mode: 'insensitive' as const } },
+          { description: { contains: search, mode: 'insensitive' as const } },
+        ],
+      }),
+    };
 
-    return priceLists as PriceList[];
+    const [priceLists, total] = await Promise.all([
+      prisma.priceList.findMany({
+        where,
+        include: {
+          _count: {
+            select: { items: true },
+          },
+        },
+        orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.priceList.count({ where }),
+    ]);
+
+    return {
+      data: priceLists as PriceList[],
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
+      },
+    };
   } catch (error) {
     logger.error('Error al obtener listas de precios', { data: { error } });
     throw new Error('Error al obtener listas de precios');

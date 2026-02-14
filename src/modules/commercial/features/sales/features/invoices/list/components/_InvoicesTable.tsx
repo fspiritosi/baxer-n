@@ -25,6 +25,7 @@ import {
 import {
   MoreHorizontal,
   Eye,
+  Pencil,
   CheckCircle,
   XCircle,
   FileText,
@@ -244,6 +245,10 @@ export function InvoicesTable({ data }: InvoicesTableProps) {
               </DropdownMenuItem>
               {isDraft && (
                 <>
+                  <DropdownMenuItem onClick={() => router.push(`/dashboard/commercial/invoices/${invoice.id}/edit`)}>
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Editar
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handleConfirmClick(invoice)}>
                     <CheckCircle className="mr-2 h-4 w-4" />
                     Confirmar
@@ -263,9 +268,11 @@ export function InvoicesTable({ data }: InvoicesTableProps) {
                 </>
               )}
               <DropdownMenuSeparator />
-              <DropdownMenuItem disabled>
-                <Download className="mr-2 h-4 w-4" />
-                Descargar PDF
+              <DropdownMenuItem asChild>
+                <a href={`/api/invoices/${invoice.id}/pdf`} target="_blank" rel="noopener noreferrer">
+                  <Download className="mr-2 h-4 w-4" />
+                  Descargar PDF
+                </a>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -303,8 +310,8 @@ export function InvoicesTable({ data }: InvoicesTableProps) {
             <AlertDialogTitle>¿Anular factura?</AlertDialogTitle>
             <AlertDialogDescription>
               Esta acción anulará la factura <strong>{selectedInvoice?.fullNumber}</strong>.
-              Esta acción no se puede deshacer. Para revertir el stock, deberá crear una Nota
-              de Crédito.
+              Si la factura fue confirmada, el stock será restaurado automáticamente.
+              Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -170,6 +170,7 @@ export const bankMovementSchema = z.object({
     .max(50, 'El número de extracto no puede exceder 50 caracteres')
     .optional()
     .nullable(),
+  accountId: z.string().uuid('Cuenta contable inválida'),
 });
 
 // Schema para conciliación bancaria

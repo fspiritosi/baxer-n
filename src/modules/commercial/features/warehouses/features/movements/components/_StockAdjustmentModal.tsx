@@ -45,7 +45,7 @@ import moment from 'moment';
 import { cn } from '@/shared/lib/utils';
 
 import { createStockAdjustment } from '../actions.server';
-import { stockAdjustmentSchema, ADJUSTMENT_REASON_LABELS } from '../validators';
+import { stockAdjustmentSchema, ADJUSTMENT_REASON_LABELS } from '../../../shared/validators';
 
 type FormData = z.infer<typeof stockAdjustmentSchema>;
 

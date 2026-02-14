@@ -148,6 +148,46 @@ export async function updateBankAccount(id: string, data: BankAccountFormData) {
 }
 
 /**
+ * Obtiene una cuenta bancaria por ID
+ */
+export async function getBankAccountById(id: string) {
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const bankAccount = await prisma.bankAccount.findFirst({
+      where: { id, companyId },
+      select: {
+        id: true,
+        bankName: true,
+        accountNumber: true,
+        accountType: true,
+        cbu: true,
+        alias: true,
+        currency: true,
+        balance: true,
+        accountId: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!bankAccount) {
+      return null;
+    }
+
+    return {
+      ...bankAccount,
+      balance: Number(bankAccount.balance),
+    };
+  } catch (error) {
+    logger.error('Error al obtener cuenta bancaria', { data: { error, id } });
+    throw new Error('Error al obtener cuenta bancaria');
+  }
+}
+
+/**
  * Desactiva una cuenta bancaria
  */
 export async function deactivateBankAccount(id: string) {

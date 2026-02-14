@@ -28,7 +28,7 @@ export function StockByProduct() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProductId, setSelectedProductId] = useState<string>('');
 
-  const { data: products = [] } = useQuery({
+  const { data: productsData } = useQuery({
     queryKey: ['products-for-stock'],
     queryFn: () => getProducts(),
   });
@@ -38,6 +38,8 @@ export function StockByProduct() {
     queryFn: () => getProductStock(selectedProductId),
     enabled: Boolean(selectedProductId),
   });
+
+  const products = productsData?.data || [];
 
   const filteredProducts = products.filter(
     (product) =>
