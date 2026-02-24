@@ -18,7 +18,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Plus, Trash2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { createReceiptSchema, type CreateReceiptFormData, PAYMENT_METHOD_LABELS } from '../../../../shared/validators';
+import { createReceiptSchema, type CreateReceiptFormData, PAYMENT_METHOD_LABELS, WITHHOLDING_TAX_TYPE_LABELS } from '../../../../shared/validators';
 import { createReceipt, getPendingInvoices, getAvailableCashRegisters, getAvailableBankAccounts } from '../../actions.server';
 import { getContractorsForSelect } from '@/modules/company/features/contractors/list/actions.server';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -44,6 +44,7 @@ export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
       notes: null,
       items: [],
       payments: [],
+      withholdings: [],
     },
   });
 
@@ -55,6 +56,11 @@ export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
   const { fields: paymentFields, append: appendPayment, remove: removePayment } = useFieldArray({
     control: form.control,
     name: 'payments',
+  });
+
+  const { fields: withholdingFields, append: appendWithholding, remove: removeWithholding } = useFieldArray({
+    control: form.control,
+    name: 'withholdings',
   });
 
   // Query para clientes
@@ -122,17 +128,28 @@ export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
     });
   };
 
+  const addWithholding = () => {
+    appendWithholding({
+      taxType: 'IVA',
+      rate: '',
+      amount: '',
+      certificateNumber: null,
+    });
+  };
+
   const calculateTotals = () => {
     const items = form.watch('items');
     const payments = form.watch('payments');
+    const withholdings = form.watch('withholdings');
 
     const totalItems = items.reduce((sum, item) => sum + parseFloat(item.amount || '0'), 0);
     const totalPayments = payments.reduce((sum, payment) => sum + parseFloat(payment.amount || '0'), 0);
+    const totalWithholdings = withholdings.reduce((sum, w) => sum + parseFloat(w.amount || '0'), 0);
 
-    return { totalItems, totalPayments, difference: totalItems - totalPayments };
+    return { totalItems, totalPayments, totalWithholdings, difference: totalItems - totalPayments - totalWithholdings };
   };
 
-  const { totalItems, totalPayments, difference } = calculateTotals();
+  const { totalItems, totalPayments, totalWithholdings, difference } = calculateTotals();
 
   const onSubmit = async (data: CreateReceiptFormData) => {
     try {
@@ -159,7 +176,7 @@ export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
           Nuevo Recibo
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="md:min-w-[800px]">
         <DialogHeader>
           <DialogTitle>Crear Recibo de Cobro</DialogTitle>
         </DialogHeader>
@@ -292,7 +309,7 @@ export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
                         control={form.control}
                         name={`items.${index}.amount`}
                         render={({ field }) => (
-                          <FormItem className="w-32">
+                          <FormItem className="w-64">
                             <FormLabel className="text-xs">Monto</FormLabel>
                             <div className="flex gap-1">
                               <FormControl>
@@ -349,7 +366,9 @@ export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
                 {paymentFields.length === 0 && (
                   <Alert>
                     <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>Agregue al menos una forma de pago</AlertDescription>
+                    <AlertDescription>
+                      Sin formas de pago — el recibo podrá vincularse a un movimiento bancario existente
+                    </AlertDescription>
                   </Alert>
                 )}
 
@@ -503,6 +522,114 @@ export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
               </CardContent>
             </Card>
 
+            {/* Retenciones Sufridas */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-base">Retenciones Sufridas</CardTitle>
+                    <CardDescription>Retenciones aplicadas por el cliente</CardDescription>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" onClick={addWithholding}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Agregar Retención
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {withholdingFields.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-2">
+                    Sin retenciones
+                  </p>
+                )}
+
+                {withholdingFields.map((field, index) => (
+                  <div key={field.id} className="space-y-3 p-4 border rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-medium">Retención {index + 1}</h4>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeWithholding(index)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-4">
+                      <FormField
+                        control={form.control}
+                        name={`withholdings.${index}.taxType`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Tipo *</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {Object.entries(WITHHOLDING_TAX_TYPE_LABELS).map(([value, label]) => (
+                                  <SelectItem key={value} value={value}>
+                                    {label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name={`withholdings.${index}.rate`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Alícuota %</FormLabel>
+                            <FormControl>
+                              <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name={`withholdings.${index}.amount`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Monto *</FormLabel>
+                            <FormControl>
+                              <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name={`withholdings.${index}.certificateNumber`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>N° Certificado</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Opcional" {...field} value={field.value || ''} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
             {/* Resumen */}
             <Card>
               <CardHeader>
@@ -516,23 +643,45 @@ export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
                       ${totalItems.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Total Pagos:</span>
-                    <span className="font-medium">
-                      ${totalPayments.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                  <div className="flex justify-between border-t pt-2">
-                    <span>Diferencia:</span>
-                    <span className={`font-bold ${difference === 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      ${Math.abs(difference).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                  {difference !== 0 && (
-                    <Alert variant="destructive">
+                  {(paymentFields.length > 0 || withholdingFields.length > 0) && (
+                    <>
+                      {paymentFields.length > 0 && (
+                        <div className="flex justify-between">
+                          <span>Total Pagos:</span>
+                          <span className="font-medium">
+                            ${totalPayments.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+                      {withholdingFields.length > 0 && (
+                        <div className="flex justify-between">
+                          <span>Total Retenciones:</span>
+                          <span className="font-medium">
+                            ${totalWithholdings.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex justify-between border-t pt-2">
+                        <span>Diferencia:</span>
+                        <span className={`font-bold ${difference === 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          ${Math.abs(difference).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      {difference !== 0 && (
+                        <Alert variant="destructive">
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>
+                            El total de facturas debe ser igual al total de pagos + retenciones
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                    </>
+                  )}
+                  {paymentFields.length === 0 && withholdingFields.length === 0 && (
+                    <Alert>
                       <AlertCircle className="h-4 w-4" />
                       <AlertDescription>
-                        El total de facturas debe ser igual al total de pagos
+                        Este recibo se creará sin formas de pago. Podrá vincularlo a un movimiento bancario desde la conciliación.
                       </AlertDescription>
                     </Alert>
                   )}
@@ -544,7 +693,7 @@ export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={difference !== 0}>
+              <Button type="submit" disabled={(paymentFields.length > 0 || withholdingFields.length > 0) && difference !== 0}>
                 Crear Recibo
               </Button>
             </div>

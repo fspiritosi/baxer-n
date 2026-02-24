@@ -7,11 +7,15 @@ import { getActiveCompanyId } from '@/shared/lib/company';
 import { createInvoiceSchema } from '../shared/validators';
 import { revalidatePath } from 'next/cache';
 import { Prisma } from '@/generated/prisma/client';
+import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
+import { parseSearchParams, stateToPrismaParams } from '@/shared/components/common/DataTable/helpers';
 import {
   validateVoucherType,
   mapTaxStatusToCustomerTaxCondition,
 } from '../shared/afip-validation';
 import { createJournalEntryForSalesInvoice } from '@/modules/accounting/features/integrations/commercial';
+import { isCreditNote, isDebitNote } from '@/modules/commercial/shared/voucher-utils';
+import { applySalesCreditNote } from '@/modules/commercial/shared/credit-note-compensation';
 
 // Obtener todas las facturas de venta
 export async function getInvoices() {
@@ -55,6 +59,10 @@ export async function getInvoices() {
         },
         cae: true,
         caeExpiryDate: true,
+        documentUrl: true,
+        documentKey: true,
+        companyId: true,
+        company: { select: { name: true } },
         createdAt: true,
         updatedAt: true,
       },
@@ -72,6 +80,90 @@ export async function getInvoices() {
       data: { companyId, error },
     });
     throw new Error('Error al obtener las facturas');
+  }
+}
+
+// Obtener facturas de venta con paginación server-side para DataTable
+export async function getInvoicesPaginated(searchParams: DataTableSearchParams) {
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const parsed = parseSearchParams(searchParams);
+    const { page, pageSize, search, sortBy, sortOrder } = parsed;
+    const { skip, take, orderBy: prismaOrderBy } = stateToPrismaParams(parsed);
+
+    const where: Prisma.SalesInvoiceWhereInput = {
+      companyId,
+      ...(search && {
+        OR: [
+          { fullNumber: { contains: search, mode: 'insensitive' } },
+          { customer: { name: { contains: search, mode: 'insensitive' } } },
+          { customer: { taxId: { contains: search, mode: 'insensitive' } } },
+        ],
+      }),
+    };
+
+    const orderBy = prismaOrderBy && Object.keys(prismaOrderBy).length > 0
+      ? prismaOrderBy
+      : [{ issueDate: 'desc' as const }, { number: 'desc' as const }];
+
+    const [data, total] = await Promise.all([
+      prisma.salesInvoice.findMany({
+        where,
+        select: {
+          id: true,
+          voucherType: true,
+          number: true,
+          fullNumber: true,
+          issueDate: true,
+          dueDate: true,
+          subtotal: true,
+          vatAmount: true,
+          total: true,
+          status: true,
+          customer: {
+            select: {
+              id: true,
+              name: true,
+              taxId: true,
+            },
+          },
+          pointOfSale: {
+            select: {
+              id: true,
+              number: true,
+              name: true,
+            },
+          },
+          cae: true,
+          caeExpiryDate: true,
+          documentUrl: true,
+          documentKey: true,
+          companyId: true,
+          company: { select: { name: true } },
+          createdAt: true,
+          updatedAt: true,
+        },
+        orderBy,
+        skip,
+        take,
+      }),
+      prisma.salesInvoice.count({ where }),
+    ]);
+
+    return {
+      data: data.map((invoice) => ({
+        ...invoice,
+        subtotal: Number(invoice.subtotal),
+        vatAmount: Number(invoice.vatAmount),
+        total: Number(invoice.total),
+      })),
+      total,
+    };
+  } catch (error) {
+    logger.error('Error al obtener facturas paginadas', { data: { error } });
+    throw error;
   }
 }
 
@@ -128,6 +220,72 @@ export async function getInvoiceById(id: string) {
             status: true,
           },
         },
+        company: {
+          select: {
+            name: true,
+          },
+        },
+        // Documentos vinculados
+        creditDebitNotes: {
+          select: {
+            id: true,
+            fullNumber: true,
+            voucherType: true,
+            total: true,
+            status: true,
+            issueDate: true,
+          },
+          orderBy: { issueDate: 'desc' },
+        },
+        originalInvoice: {
+          select: {
+            id: true,
+            fullNumber: true,
+            voucherType: true,
+          },
+        },
+        receiptItems: {
+          select: {
+            amount: true,
+            receipt: {
+              select: {
+                id: true,
+                fullNumber: true,
+                date: true,
+                status: true,
+                totalAmount: true,
+              },
+            },
+          },
+        },
+        creditNoteApplicationsReceived: {
+          select: {
+            amount: true,
+            appliedAt: true,
+            creditNote: {
+              select: {
+                id: true,
+                fullNumber: true,
+                voucherType: true,
+                total: true,
+              },
+            },
+          },
+        },
+        creditNoteApplicationsGiven: {
+          select: {
+            amount: true,
+            appliedAt: true,
+            invoice: {
+              select: {
+                id: true,
+                fullNumber: true,
+                voucherType: true,
+                total: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -140,6 +298,7 @@ export async function getInvoiceById(id: string) {
       ...invoice,
       subtotal: Number(invoice.subtotal),
       vatAmount: Number(invoice.vatAmount),
+      otherTaxes: Number(invoice.otherTaxes),
       total: Number(invoice.total),
       lines: invoice.lines.map((line) => ({
         ...line,
@@ -149,6 +308,33 @@ export async function getInvoiceById(id: string) {
         vatAmount: Number(line.vatAmount),
         subtotal: Number(line.subtotal),
         total: Number(line.total),
+      })),
+      creditDebitNotes: invoice.creditDebitNotes.map((cn) => ({
+        ...cn,
+        total: Number(cn.total),
+      })),
+      receiptItems: invoice.receiptItems.map((item) => ({
+        amount: Number(item.amount),
+        receipt: {
+          ...item.receipt,
+          totalAmount: Number(item.receipt.totalAmount),
+        },
+      })),
+      creditNoteApplicationsReceived: invoice.creditNoteApplicationsReceived.map((app) => ({
+        amount: Number(app.amount),
+        appliedAt: app.appliedAt,
+        creditNote: {
+          ...app.creditNote,
+          total: Number(app.creditNote.total),
+        },
+      })),
+      creditNoteApplicationsGiven: invoice.creditNoteApplicationsGiven.map((app) => ({
+        amount: Number(app.amount),
+        appliedAt: app.appliedAt,
+        invoice: {
+          ...app.invoice,
+          total: Number(app.invoice.total),
+        },
       })),
     };
   } catch (error) {
@@ -214,6 +400,43 @@ function calculateLineAmounts(
     vatAmount: Math.round(vatAmount * 100) / 100,
     total: Math.round(total * 100) / 100,
   };
+}
+
+// Obtener facturas de un cliente para select de factura original (NC/ND)
+export async function getCustomerInvoicesForSelect(customerId: string) {
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  const invoices = await prisma.salesInvoice.findMany({
+    where: {
+      companyId,
+      customerId,
+      status: { in: ['CONFIRMED', 'PAID', 'PARTIAL_PAID'] },
+      voucherType: {
+        notIn: [
+          'NOTA_CREDITO_A', 'NOTA_CREDITO_B', 'NOTA_CREDITO_C',
+          'NOTA_DEBITO_A', 'NOTA_DEBITO_B', 'NOTA_DEBITO_C',
+        ],
+      },
+    },
+    select: {
+      id: true,
+      fullNumber: true,
+      issueDate: true,
+      total: true,
+      voucherType: true,
+    },
+    orderBy: { issueDate: 'desc' },
+    take: 50,
+  });
+
+  return invoices.map((inv) => ({
+    id: inv.id,
+    fullNumber: inv.fullNumber,
+    issueDate: inv.issueDate,
+    total: Number(inv.total),
+    voucherType: inv.voucherType,
+  }));
 }
 
 // Crear una nueva factura
@@ -335,6 +558,7 @@ export async function createInvoice(data: unknown) {
           total: new Prisma.Decimal(invoiceTotal),
           notes: validatedData.notes,
           internalNotes: validatedData.internalNotes,
+          originalInvoiceId: validatedData.originalInvoiceId || null,
           status: 'DRAFT',
           createdBy: userId,
           lines: {
@@ -362,7 +586,7 @@ export async function createInvoice(data: unknown) {
     });
 
     revalidatePath('/dashboard/commercial/invoices');
-    return invoice;
+    return { success: true, id: invoice.id };
   } catch (error) {
     logger.error('Error al crear factura', {
       data: { companyId, error },
@@ -423,78 +647,120 @@ export async function confirmInvoice(id: string) {
         },
       });
 
-      // Descontar stock de productos
-      for (const line of invoice.lines) {
-        if (line.product.trackStock) {
-          // Buscar almacén principal (o el primero disponible)
-          const warehouse = await tx.warehouse.findFirst({
-            where: {
-              companyId: companyId,
-              isActive: true,
-            },
-            orderBy: {
-              createdAt: 'asc',
-            },
-          });
+      // ND no afecta stock (ajuste financiero)
+      // NC restaura stock, Factura descuenta stock
+      const isND = isDebitNote(invoice.voucherType);
+      const isNC = isCreditNote(invoice.voucherType);
 
-          if (!warehouse) {
-            throw new Error('No hay almacenes disponibles para descontar stock');
+      if (!isND) {
+        for (const line of invoice.lines) {
+          if (line.product.trackStock) {
+            // Buscar almacén principal (o el primero disponible)
+            const warehouse = await tx.warehouse.findFirst({
+              where: {
+                companyId: companyId,
+                isActive: true,
+              },
+              orderBy: {
+                createdAt: 'asc',
+              },
+            });
+
+            if (!warehouse) {
+              throw new Error('No hay almacenes disponibles para gestionar stock');
+            }
+
+            const quantityToHandle = line.quantity;
+
+            if (isNC) {
+              // NC de venta: restaurar stock (devuelve productos)
+              await tx.warehouseStock.upsert({
+                where: {
+                  warehouseId_productId: {
+                    warehouseId: warehouse.id,
+                    productId: line.productId,
+                  },
+                },
+                update: {
+                  quantity: {
+                    increment: quantityToHandle,
+                  },
+                },
+                create: {
+                  warehouseId: warehouse.id,
+                  productId: line.productId,
+                  quantity: quantityToHandle,
+                },
+              });
+
+              await tx.stockMovement.create({
+                data: {
+                  companyId: companyId,
+                  productId: line.productId,
+                  warehouseId: warehouse.id,
+                  type: 'RETURN',
+                  quantity: quantityToHandle,
+                  referenceType: 'sales_invoice',
+                  referenceId: invoice.id,
+                  notes: `NC Venta ${invoice.fullNumber}`,
+                  date: new Date(),
+                  createdBy: userId,
+                },
+              });
+            } else {
+              // Factura normal: descontar stock
+              const warehouseStock = await tx.warehouseStock.findUnique({
+                where: {
+                  warehouseId_productId: {
+                    warehouseId: warehouse.id,
+                    productId: line.productId,
+                  },
+                },
+              });
+
+              const currentStock = warehouseStock?.quantity || new Prisma.Decimal(0);
+
+              if (currentStock.lessThan(quantityToHandle)) {
+                throw new Error(
+                  `Stock insuficiente para ${line.product.name}. Disponible: ${currentStock}, Requerido: ${quantityToHandle}`
+                );
+              }
+
+              await tx.warehouseStock.upsert({
+                where: {
+                  warehouseId_productId: {
+                    warehouseId: warehouse.id,
+                    productId: line.productId,
+                  },
+                },
+                update: {
+                  quantity: {
+                    decrement: quantityToHandle,
+                  },
+                },
+                create: {
+                  warehouseId: warehouse.id,
+                  productId: line.productId,
+                  quantity: new Prisma.Decimal(0).minus(quantityToHandle),
+                },
+              });
+
+              await tx.stockMovement.create({
+                data: {
+                  companyId: companyId,
+                  productId: line.productId,
+                  warehouseId: warehouse.id,
+                  type: 'SALE',
+                  quantity: quantityToHandle,
+                  referenceType: 'sales_invoice',
+                  referenceId: invoice.id,
+                  notes: `Factura ${invoice.fullNumber}`,
+                  date: new Date(),
+                  createdBy: userId,
+                },
+              });
+            }
           }
-
-          // Obtener stock actual
-          const warehouseStock = await tx.warehouseStock.findUnique({
-            where: {
-              warehouseId_productId: {
-                warehouseId: warehouse.id,
-                productId: line.productId,
-              },
-            },
-          });
-
-          const currentStock = warehouseStock?.quantity || new Prisma.Decimal(0);
-          const quantityToDeduct = line.quantity;
-
-          if (currentStock.lessThan(quantityToDeduct)) {
-            throw new Error(
-              `Stock insuficiente para ${line.product.name}. Disponible: ${currentStock}, Requerido: ${quantityToDeduct}`
-            );
-          }
-
-          // Actualizar o crear stock
-          await tx.warehouseStock.upsert({
-            where: {
-              warehouseId_productId: {
-                warehouseId: warehouse.id,
-                productId: line.productId,
-              },
-            },
-            update: {
-              quantity: {
-                decrement: quantityToDeduct,
-              },
-            },
-            create: {
-              warehouseId: warehouse.id,
-              productId: line.productId,
-              quantity: new Prisma.Decimal(0).minus(quantityToDeduct),
-            },
-          });
-
-          // Registrar movimiento de stock
-          await tx.stockMovement.create({
-            data: {
-              companyId: companyId,
-              productId: line.productId,
-              warehouseId: warehouse.id,
-              type: 'SALE',
-              quantity: quantityToDeduct,
-              referenceType: 'sales_invoice',
-              referenceId: invoice.id,
-              notes: `Factura ${invoice.fullNumber}`,
-              date: new Date(),
-              createdBy: userId,
-            },
-          });
         }
       }
 
@@ -520,6 +786,16 @@ export async function confirmInvoice(id: string) {
         // No lanzar error para no interrumpir la confirmación de la factura
       }
 
+      // Auto-compensar NC contra facturas/ND pendientes del mismo cliente
+      if (isCreditNote(updatedInvoice.voucherType)) {
+        await applySalesCreditNote(tx, {
+          id: updatedInvoice.id,
+          total: updatedInvoice.total,
+          customerId: updatedInvoice.customerId,
+          originalInvoiceId: updatedInvoice.originalInvoiceId,
+        }, companyId);
+      }
+
       return updatedInvoice;
     });
 
@@ -535,7 +811,7 @@ export async function confirmInvoice(id: string) {
     revalidatePath('/dashboard/commercial/invoices');
     revalidatePath(`/dashboard/commercial/invoices/${id}`);
     revalidatePath('/dashboard/commercial/stock');
-    return result;
+    return { success: true, id: result.id };
   } catch (error) {
     logger.error('Error al confirmar factura', {
       data: { id, companyId, error },
@@ -670,7 +946,7 @@ export async function updateInvoice(id: string, data: unknown) {
 
     revalidatePath('/dashboard/commercial/invoices');
     revalidatePath(`/dashboard/commercial/invoices/${id}`);
-    return result;
+    return { success: true, id: result.id };
   } catch (error) {
     logger.error('Error al actualizar factura', { data: { id, companyId, error } });
     if (error instanceof Error) throw error;
@@ -776,7 +1052,7 @@ export async function cancelInvoice(id: string) {
     revalidatePath('/dashboard/commercial/invoices');
     revalidatePath(`/dashboard/commercial/invoices/${id}`);
     revalidatePath('/dashboard/commercial/stock');
-    return result;
+    return { success: true, id: result.id };
   } catch (error) {
     logger.error('Error al anular factura', { data: { id, companyId, error } });
     if (error instanceof Error) throw error;

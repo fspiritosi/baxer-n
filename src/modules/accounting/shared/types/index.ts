@@ -104,4 +104,8 @@ export interface JournalEntryWithLines {
       name: string;
     };
   }[];
+  salesInvoices?: { id: string; fullNumber: string }[];
+  purchaseInvoices?: { id: string; fullNumber: string }[];
+  receipts?: { id: string; fullNumber: string }[];
+  paymentOrders?: { id: string; fullNumber: string }[];
 }

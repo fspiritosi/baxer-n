@@ -113,7 +113,8 @@ Todas las reglas detalladas están en `.claude/rules/`. Se cargan automáticamen
 | Formularios | `@.claude/rules/forms.md` | React Hook Form + Zod |
 | Storage | `@.claude/rules/storage.md` | MinIO/R2, presigned URLs |
 | Nomenclatura | `@.claude/rules/nomenclature.md` | Archivos, imports, moment.js |
-| Testing | `@.claude/rules/testing-cypress.md` | Cypress E2E |
+| Testing | `@.claude/rules/testing-cypress.md` | Cypress E2E - Tests obligatorios con cada cambio |
+| Documentación | `docs/README.md` | Actualizar docs/ con cambios significativos |
 
 ---
 
@@ -166,7 +167,27 @@ EmployeesList.tsx
 _EmployeesTable.tsx  // ← Nota el prefijo _
 ```
 
-### 5. app/ = Solo Rutas, NO Components
+### 5. AlertDialog, NUNCA confirm()/alert()
+
+```typescript
+// ✅ SIEMPRE - AlertDialog de shadcn/ui
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/shared/components/ui/alert-dialog';
+
+// ❌ NUNCA - confirm() / alert() del navegador
+if (!confirm('¿Estás seguro?')) return;
+alert('Operación completada');
+```
+
+### 6. app/ = Solo Rutas, NO Components
 
 ```typescript
 // ❌ NUNCA crear carpetas de components en app/
@@ -185,6 +206,34 @@ modules/auth/features/accept-invitation/
 ├── components/
 │   └── _AcceptForm.tsx  // ✅ Componentes van aquí
 └── index.ts
+```
+
+### 7. Tests E2E con Cada Cambio
+
+```typescript
+// Al crear/modificar una feature, SIEMPRE actualizar tests en cypress/e2e/
+// Nueva feature → Crear spec nuevo
+// Modificar feature → Actualizar tests existentes
+// Cambiar textos/UI → Actualizar assertions
+
+// Ejecutar tests del módulo afectado:
+npm run cy:run:commercial    // cambios en comercial
+npm run cy:run:accounting    // cambios en contabilidad
+npm run cy:run:dashboard     // cambios en dashboard
+```
+
+### 8. Documentacion del Desarrollador con Cada Cambio
+
+```
+// Al hacer cambios significativos, actualizar docs/ correspondiente:
+// Nuevo módulo         → docs/modules/{modulo}.md + docs/architecture/data-model.md
+// Nuevo modelo Prisma  → docs/architecture/data-model.md
+// Cambio en permisos   → docs/architecture/auth-and-permissions.md
+// Cambio en infra      → docs/infrastructure/
+// Cambio en shared/    → docs/architecture/project-structure.md
+// Nueva convención     → docs/conventions/
+
+// Documentación en: docs/README.md (índice principal)
 ```
 
 **app/ solo puede contener:**
@@ -280,6 +329,8 @@ modules/{module-name}/
 - [ ] Server actions usan `getActiveCompanyId()`
 - [ ] Columnas de DataTable tienen `meta.title`
 - [ ] Diseño responsive implementado
+- [ ] Tests E2E actualizados/creados para los cambios (`cypress/e2e/`)
+- [ ] Documentación del desarrollador actualizada si aplica (`docs/`)
 
 ---
 

@@ -6,12 +6,11 @@ export const metadata: Metadata = {
   description: 'Panel principal',
 };
 
-/**
- * Página del Dashboard
- *
- * Server Component - La lógica principal está en features/Dashboard
- * Esta página es "delgada" siguiendo la arquitectura del proyecto
- */
-export default function DashboardPage() {
-  return <DashboardContent />;
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ month?: string }>;
+}) {
+  const params = await searchParams;
+  return <DashboardContent period={params.month} />;
 }

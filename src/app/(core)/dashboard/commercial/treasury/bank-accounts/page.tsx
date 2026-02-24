@@ -1,4 +1,5 @@
 import { Metadata } from 'next';
+import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
 
 import { BankAccountsList } from '@/modules/commercial/features/treasury/features/bank-accounts/list';
 
@@ -7,6 +8,11 @@ export const metadata: Metadata = {
   description: 'Gestión de cuentas bancarias y movimientos',
 };
 
-export default function BankAccountsPage() {
-  return <BankAccountsList />;
+interface Props {
+  searchParams: Promise<DataTableSearchParams>;
+}
+
+export default async function BankAccountsPage({ searchParams }: Props) {
+  const params = await searchParams;
+  return <BankAccountsList searchParams={params} />;
 }

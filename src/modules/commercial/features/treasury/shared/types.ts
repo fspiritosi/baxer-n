@@ -8,6 +8,12 @@ import type {
   PaymentMethod,
   ReceiptStatus,
   PaymentOrderStatus,
+  WithholdingTaxType,
+  CheckType,
+  CheckStatus,
+  ProjectionType,
+  ProjectionCategory,
+  ProjectionStatus,
 } from '@/generated/prisma/enums';
 
 // ====================================
@@ -26,7 +32,19 @@ export type { BankAccountType, BankAccountStatus, BankMovementType };
 // RECEIPT TYPES
 // ====================================
 
-export type { PaymentMethod, ReceiptStatus, PaymentOrderStatus };
+export type { PaymentMethod, ReceiptStatus, PaymentOrderStatus, WithholdingTaxType };
+
+// ====================================
+// CHECK TYPES
+// ====================================
+
+export type { CheckType, CheckStatus };
+
+// ====================================
+// PROJECTION TYPES
+// ====================================
+
+export type { ProjectionType, ProjectionCategory };
 
 // Tipo para caja con sesión activa opcional
 export interface CashRegisterWithActiveSession extends Record<string, unknown> {
@@ -141,6 +159,8 @@ export interface BankMovementDetail {
     bankName: string;
     accountNumber: string;
   };
+  receipt?: { id: string; fullNumber: string } | null;
+  paymentOrder?: { id: string; fullNumber: string } | null;
 }
 
 // Tipo para cuenta bancaria con movimientos
@@ -184,13 +204,17 @@ export interface PendingInvoice {
 // Tipo para recibo con items y pagos
 export interface ReceiptWithDetails extends Record<string, unknown> {
   id: string;
+  companyId: string;
   number: number;
   fullNumber: string;
   date: Date;
   totalAmount: number;
   notes: string | null;
   status: ReceiptStatus;
+  documentUrl: string | null;
+  documentKey: string | null;
   createdAt: Date;
+  company: { name: string };
   customer: {
     id: string;
     name: string;
@@ -220,6 +244,23 @@ export interface ReceiptWithDetails extends Record<string, unknown> {
     checkNumber: string | null;
     cardLast4: string | null;
     reference: string | null;
+  }>;
+  withholdings: Array<{
+    id: string;
+    taxType: WithholdingTaxType;
+    rate: number;
+    amount: number;
+    certificateNumber: string | null;
+  }>;
+  bankMovements?: Array<{
+    id: string;
+    type: BankMovementType;
+    amount: number;
+    date: Date;
+    bankAccount: {
+      bankName: string;
+      accountNumber: string;
+    };
   }>;
 }
 
@@ -260,19 +301,23 @@ export interface PendingPurchaseInvoice {
 // Tipo para orden de pago con items y formas de pago
 export interface PaymentOrderWithDetails extends Record<string, unknown> {
   id: string;
+  companyId: string;
   number: number;
   fullNumber: string;
   date: Date;
   totalAmount: number;
   notes: string | null;
   status: PaymentOrderStatus;
+  documentUrl: string | null;
+  documentKey: string | null;
   createdAt: Date;
+  company: { name: string };
   supplier: {
     id: string;
     businessName: string;
     tradeName: string | null;
     taxId: string | null;
-  };
+  } | null;
   items: Array<{
     id: string;
     amount: number;
@@ -280,7 +325,13 @@ export interface PaymentOrderWithDetails extends Record<string, unknown> {
       id: string;
       fullNumber: string;
       total: number;
-    };
+    } | null;
+    expense: {
+      id: string;
+      fullNumber: string;
+      description: string;
+      amount: number;
+    } | null;
   }>;
   payments: Array<{
     id: string;
@@ -298,6 +349,23 @@ export interface PaymentOrderWithDetails extends Record<string, unknown> {
     cardLast4: string | null;
     reference: string | null;
   }>;
+  withholdings: Array<{
+    id: string;
+    taxType: WithholdingTaxType;
+    rate: number;
+    amount: number;
+    certificateNumber: string | null;
+  }>;
+  bankMovements?: Array<{
+    id: string;
+    type: BankMovementType;
+    amount: number;
+    date: Date;
+    bankAccount: {
+      bankName: string;
+      accountNumber: string;
+    };
+  }>;
 }
 
 // Tipo para lista de órdenes de pago
@@ -313,9 +381,105 @@ export interface PaymentOrderListItem extends Record<string, unknown> {
     id: string;
     businessName: string;
     tradeName: string | null;
-  };
+  } | null;
   _count: {
     items: number;
     payments: number;
   };
+}
+
+// ====================================
+// CHECK INTERFACES
+// ====================================
+
+export interface CheckListItem extends Record<string, unknown> {
+  id: string;
+  type: CheckType;
+  status: CheckStatus;
+  checkNumber: string;
+  bankName: string;
+  amount: number;
+  issueDate: Date;
+  dueDate: Date;
+  drawerName: string;
+  customer: { id: string; name: string } | null;
+  supplier: { id: string; businessName: string } | null;
+  bankAccount: { id: string; bankName: string; accountNumber: string } | null;
+}
+
+export interface CheckWithDetails extends Record<string, unknown> {
+  id: string;
+  type: CheckType;
+  status: CheckStatus;
+  checkNumber: string;
+  bankName: string;
+  branch: string | null;
+  accountNumber: string | null;
+  amount: number;
+  issueDate: Date;
+  dueDate: Date;
+  drawerName: string;
+  drawerTaxId: string | null;
+  payeeName: string | null;
+  endorsedToName: string | null;
+  endorsedToTaxId: string | null;
+  endorsedAt: Date | null;
+  rejectedAt: Date | null;
+  rejectionReason: string | null;
+  clearedAt: Date | null;
+  depositedAt: Date | null;
+  notes: string | null;
+  customer: { id: string; name: string } | null;
+  supplier: { id: string; businessName: string } | null;
+  bankAccount: { id: string; bankName: string; accountNumber: string } | null;
+}
+
+// ====================================
+// PROJECTION INTERFACES
+// ====================================
+
+export interface ProjectionListItem extends Record<string, unknown> {
+  id: string;
+  type: ProjectionType;
+  category: ProjectionCategory;
+  description: string;
+  amount: number;
+  date: Date;
+  isRecurring: boolean;
+  notes: string | null;
+  status: ProjectionStatus;
+  confirmedAmount: number;
+  createdAt: Date;
+}
+
+export interface ProjectionDocumentLinkItem {
+  id: string;
+  amount: number;
+  notes: string | null;
+  createdAt: Date;
+  documentType: 'SALES_INVOICE' | 'PURCHASE_INVOICE' | 'EXPENSE';
+  documentFullNumber: string;
+  documentTotal: number;
+  documentDate: Date;
+  documentEntityName: string | null;
+}
+
+export interface DocumentForLinking {
+  id: string;
+  fullNumber: string;
+  total: number;
+  date: Date;
+  entityName: string | null;
+  documentType: 'SALES_INVOICE' | 'PURCHASE_INVOICE' | 'EXPENSE';
+}
+
+export interface ProjectionForLinking {
+  id: string;
+  type: ProjectionType;
+  category: ProjectionCategory;
+  description: string;
+  amount: number;
+  confirmedAmount: number;
+  remainingAmount: number;
+  date: Date;
 }

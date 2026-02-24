@@ -158,6 +158,8 @@ export interface DataTableProps<TData, TValue = unknown> {
   facetedFilters?: DataTableFacetedFilterConfig[];
   /** Placeholder del input de búsqueda */
   searchPlaceholder?: string;
+  /** Mostrar input de búsqueda (default: true) */
+  showSearch?: boolean;
   /** Key del campo donde buscar (default: busca en todos) */
   searchColumn?: string;
   /** Mostrar selector de columnas (default: true) */
@@ -191,6 +193,8 @@ export interface DataTableToolbarProps<TData> {
   searchColumn?: string;
   facetedFilters?: DataTableFacetedFilterConfig[];
   showColumnToggle?: boolean;
+  /** Mostrar input de búsqueda (default: true) */
+  showSearch?: boolean;
   toolbarActions?: React.ReactNode;
 }
 

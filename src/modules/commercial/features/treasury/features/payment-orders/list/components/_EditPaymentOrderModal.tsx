@@ -43,6 +43,7 @@ export function EditPaymentOrderModal({ paymentOrderId, open, onOpenChange }: Ed
       notes: null,
       items: [],
       payments: [],
+      withholdings: [],
     },
   });
 
@@ -98,7 +99,7 @@ export function EditPaymentOrderModal({ paymentOrderId, open, onOpenChange }: Ed
       <DialogTrigger asChild>
         <Button variant="ghost" className="hidden" />
       </DialogTrigger>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl">
         <DialogHeader>
           <DialogTitle>Editar Orden de Pago</DialogTitle>
         </DialogHeader>

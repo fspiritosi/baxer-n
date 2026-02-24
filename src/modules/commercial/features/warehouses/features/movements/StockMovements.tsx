@@ -1,15 +1,14 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
-import { getStockMovements } from '../list/actions.server';
+import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
+import { getStockMovements, getStockMovementsPaginated } from '../list/actions.server';
 import { getWarehousesForSelect, getStockProductsForSelect } from './actions.server';
-import { MovementsTable } from './components/_MovementsTable';
+import { _MovementsTable } from './components/_MovementsTable';
 import { MovementFilters } from './components/_MovementFilters';
 import { MovementsSummary } from './components/_MovementsSummary';
 import { _MovementActions } from './components/_MovementActions';
 
 interface StockMovementsProps {
-  searchParams?: {
-    page?: string;
-    pageSize?: string;
+  searchParams?: DataTableSearchParams & {
     warehouseId?: string;
     productId?: string;
     type?: string;
@@ -18,36 +17,22 @@ interface StockMovementsProps {
   };
 }
 
-export async function StockMovements({ searchParams }: StockMovementsProps) {
-  const page = Number(searchParams?.page) || 1;
-  const pageSize = Number(searchParams?.pageSize) || 20;
-
+export async function StockMovements({ searchParams = {} }: StockMovementsProps) {
   const filters = {
     warehouseId: searchParams?.warehouseId,
     productId: searchParams?.productId,
-    type: searchParams?.type as any,
+    type: searchParams?.type,
     dateFrom: searchParams?.dateFrom ? new Date(searchParams.dateFrom) : undefined,
     dateTo: searchParams?.dateTo ? new Date(searchParams.dateTo) : undefined,
   };
 
   // Fetch data in parallel
-  const [movements, warehouses, products] = await Promise.all([
+  const [allMovements, paginatedResult, warehouses, products] = await Promise.all([
     getStockMovements(filters),
+    getStockMovementsPaginated(searchParams, filters),
     getWarehousesForSelect(),
     getStockProductsForSelect(),
   ]);
-
-  // Paginate in memory (for now, can be optimized with DB pagination later)
-  const startIndex = (page - 1) * pageSize;
-  const endIndex = startIndex + pageSize;
-  const paginatedMovements = movements.slice(startIndex, endIndex);
-
-  const pagination = {
-    page,
-    pageSize,
-    total: movements.length,
-    totalPages: Math.ceil(movements.length / pageSize),
-  };
 
   return (
     <div className="space-y-6">
@@ -62,7 +47,7 @@ export async function StockMovements({ searchParams }: StockMovementsProps) {
       </div>
 
       {/* Summary Statistics */}
-      {movements.length > 0 && <MovementsSummary movements={movements} />}
+      {allMovements.length > 0 && <MovementsSummary movements={allMovements} />}
 
       <Card>
         <CardHeader>
@@ -80,11 +65,15 @@ export async function StockMovements({ searchParams }: StockMovementsProps) {
         <CardHeader>
           <CardTitle>Historial de Movimientos</CardTitle>
           <CardDescription>
-            Total: {movements.length} movimientos encontrados
+            Total: {paginatedResult.total} movimientos encontrados
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <MovementsTable movements={paginatedMovements} pagination={pagination} />
+          <_MovementsTable
+            data={paginatedResult.data}
+            totalRows={paginatedResult.total}
+            searchParams={searchParams}
+          />
         </CardContent>
       </Card>
     </div>

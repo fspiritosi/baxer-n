@@ -1,104 +1,182 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
-import { Users, FileText, Truck, TrendingUp } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
+import {
+  TrendingUp,
+  ShoppingCart,
+  Receipt,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  AlertTriangle,
+  Landmark,
+} from 'lucide-react';
+import { formatCurrency } from '@/shared/utils/formatters';
+import {
+  getDashboardKPIs,
+  getSalesTrend,
+  getPurchasesTrend,
+  getCriticalStockProducts,
+  getRecentAlerts,
+} from './actions.server';
+import { _SalesTrendChart } from './components/_SalesTrendChart';
+import { _PurchasesTrendChart } from './components/_PurchasesTrendChart';
+import { _CriticalStockList } from './components/_CriticalStockList';
+import { _AlertsList } from './components/_AlertsList';
+import { _PeriodSelector } from './components/_PeriodSelector';
+import moment from 'moment';
 
-/**
- * Contenido del Dashboard
- *
- * Server Component - Renderiza métricas y widgets principales
- * Los datos aquí son mocks, se reemplazarán con datos reales de la BD
- */
+interface DashboardContentProps {
+  period?: string; // "YYYY-MM" o undefined = mes actual
+}
 
-// Mock de stats - En producción vendrán de server actions
-const stats = [
-  {
-    title: 'Empleados Activos',
-    value: '124',
-    change: '+12%',
-    changeType: 'positive' as const,
-    icon: Users,
-  },
-  {
-    title: 'Documentos',
-    value: '1,234',
-    change: '+8%',
-    changeType: 'positive' as const,
-    icon: FileText,
-  },
-  {
-    title: 'Equipos',
-    value: '56',
-    change: '-2%',
-    changeType: 'negative' as const,
-    icon: Truck,
-  },
-  {
-    title: 'Operaciones',
-    value: '89',
-    change: '+23%',
-    changeType: 'positive' as const,
-    icon: TrendingUp,
-  },
-];
+export async function DashboardContent({ period }: DashboardContentProps) {
+  // Validar y normalizar el período
+  const validPeriod = period && moment(period, 'YYYY-MM', true).isValid() ? period : undefined;
+  const displayPeriod = validPeriod || moment().format('YYYY-MM');
+  const isCurrentMonth = !validPeriod || moment(validPeriod, 'YYYY-MM').isSame(moment(), 'month');
 
-export async function DashboardContent() {
-  // TODO: Reemplazar con datos reales
-  // const stats = await getDashboardStats();
+  const [kpis, salesTrend, purchasesTrend, criticalStock, alerts] = await Promise.all([
+    getDashboardKPIs(validPeriod),
+    getSalesTrend(validPeriod),
+    getPurchasesTrend(validPeriod),
+    getCriticalStockProducts(),
+    getRecentAlerts(validPeriod),
+  ]);
+
+  const periodLabel = moment(displayPeriod, 'YYYY-MM').format('MMMM YYYY');
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground">Bienvenido al panel de control</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Dashboard</h1>
+          <p className="text-muted-foreground">
+            {isCurrentMonth ? 'Resumen general de tu empresa' : `Datos de ${periodLabel}`}
+          </p>
+        </div>
+        <_PeriodSelector currentPeriod={displayPeriod} />
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => (
-          <Card key={stat.title}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
-              <stat.icon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
-              <p
-                className={`text-xs ${
-                  stat.changeType === 'positive' ? 'text-green-600' : 'text-red-600'
-                }`}
-              >
-                {stat.change} desde el mes pasado
-              </p>
-            </CardContent>
-          </Card>
-        ))}
+      {/* KPI Cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              {isCurrentMonth ? 'Ventas del Mes' : 'Ventas'}
+            </CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(kpis.salesThisMonth.total)}</div>
+            <p className="text-xs text-muted-foreground">
+              {kpis.salesThisMonth.count} factura{kpis.salesThisMonth.count !== 1 ? 's' : ''}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              {isCurrentMonth ? 'Compras del Mes' : 'Compras'}
+            </CardTitle>
+            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(kpis.purchasesThisMonth.total)}</div>
+            <p className="text-xs text-muted-foreground">
+              {kpis.purchasesThisMonth.count} factura{kpis.purchasesThisMonth.count !== 1 ? 's' : ''}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              {isCurrentMonth ? 'Gastos del Mes' : 'Gastos'}
+            </CardTitle>
+            <Receipt className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(kpis.expensesThisMonth.total)}</div>
+            <p className="text-xs text-muted-foreground">
+              {kpis.expensesThisMonth.count} gasto{kpis.expensesThisMonth.count !== 1 ? 's' : ''}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Pendiente de Cobro</CardTitle>
+            <ArrowDownCircle className="h-4 w-4 text-orange-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600">
+              {formatCurrency(kpis.pendingReceivables.total)}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {kpis.pendingReceivables.count} documento
+              {kpis.pendingReceivables.count !== 1 ? 's' : ''}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Pendiente de Pago</CardTitle>
+            <ArrowUpCircle className="h-4 w-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">
+              {formatCurrency(kpis.pendingPayables.total)}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {kpis.pendingPayables.count} documento{kpis.pendingPayables.count !== 1 ? 's' : ''}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Stock Crítico</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-yellow-500" />
+          </CardHeader>
+          <CardContent>
+            <div
+              className={`text-2xl font-bold ${kpis.criticalStockCount > 0 ? 'text-yellow-600' : ''}`}
+            >
+              {kpis.criticalStockCount}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              producto{kpis.criticalStockCount !== 1 ? 's' : ''} bajo mínimo
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Saldo Bancario</CardTitle>
+            <Landmark className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div
+              className={`text-2xl font-bold ${kpis.bankBalance < 0 ? 'text-red-600' : 'text-green-600'}`}
+            >
+              {formatCurrency(kpis.bankBalance)}
+            </div>
+            <p className="text-xs text-muted-foreground">Cuentas activas</p>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Placeholder para más contenido */}
+      {/* Charts Row */}
       <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Actividad Reciente</CardTitle>
-            <CardDescription>Últimas acciones en el sistema</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Aquí se mostrarán las actividades recientes...
-            </p>
-          </CardContent>
-        </Card>
+        <_SalesTrendChart data={salesTrend} />
+        <_PurchasesTrendChart data={purchasesTrend} />
+      </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Tareas Pendientes</CardTitle>
-            <CardDescription>Elementos que requieren atención</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Aquí se mostrarán las tareas pendientes...
-            </p>
-          </CardContent>
-        </Card>
+      {/* Bottom Row */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <_CriticalStockList products={criticalStock} />
+        <_AlertsList alerts={alerts} />
       </div>
     </div>
   );

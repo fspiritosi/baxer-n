@@ -1,24 +1,10 @@
 'use client';
 
-import { type ColumnDef } from '@tanstack/react-table';
-import { DataTable } from '@/shared/components/common/DataTable';
-import { Badge } from '@/shared/components/ui/badge';
-import { Button } from '@/shared/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/shared/components/ui/dropdown-menu';
-import { MoreHorizontal, CheckCircle, Eye, Download, Edit, Trash2 } from 'lucide-react';
-import { PAYMENT_ORDER_STATUS_LABELS, PAYMENT_ORDER_STATUS_BADGES } from '../../../../shared/validators';
-import type { PaymentOrderListItem } from '../../../../shared/types';
-import moment from 'moment';
-import { confirmPaymentOrder, deletePaymentOrder } from '../../actions.server';
+import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { PaymentOrderDetailModal } from './_PaymentOrderDetailModal';
-import { EditPaymentOrderModal } from './_EditPaymentOrderModal';
-import { useState } from 'react';
+
+import { DataTable, type DataTableSearchParams } from '@/shared/components/common/DataTable';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,13 +15,21 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/shared/components/ui/alert-dialog';
+import { confirmPaymentOrder, deletePaymentOrder } from '../../actions.server';
+import type { PaymentOrderListItem } from '../../../../shared/types';
+import { getColumns } from '../columns';
+import { PaymentOrderDetailModal } from './_PaymentOrderDetailModal';
+import { EditPaymentOrderModal } from './_EditPaymentOrderModal';
+import { CreatePaymentOrderModal } from './_CreatePaymentOrderModal';
 
-interface PaymentOrdersTableProps {
-  paymentOrders: PaymentOrderListItem[];
-  onUpdate: () => void;
+interface Props {
+  data: PaymentOrderListItem[];
+  totalRows: number;
+  searchParams: DataTableSearchParams;
 }
 
-export function PaymentOrdersTable({ paymentOrders, onUpdate }: PaymentOrdersTableProps) {
+export function _PaymentOrdersTable({ data, totalRows, searchParams }: Props) {
+  const router = useRouter();
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -51,7 +45,7 @@ export function PaymentOrdersTable({ paymentOrders, onUpdate }: PaymentOrdersTab
     try {
       await confirmPaymentOrder(selectedPaymentOrderId);
       toast.success('Orden de pago confirmada correctamente');
-      onUpdate();
+      router.refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Error al confirmar orden de pago');
     } finally {
@@ -68,7 +62,7 @@ export function PaymentOrdersTable({ paymentOrders, onUpdate }: PaymentOrdersTab
     try {
       await deletePaymentOrder(selectedPaymentOrderId);
       toast.success('Orden de pago eliminada correctamente');
-      onUpdate();
+      router.refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Error al eliminar orden de pago');
     } finally {
@@ -78,135 +72,39 @@ export function PaymentOrdersTable({ paymentOrders, onUpdate }: PaymentOrdersTab
     }
   };
 
-  const columns: ColumnDef<PaymentOrderListItem>[] = [
-    {
-      accessorKey: 'fullNumber',
-      header: 'Número',
-      meta: { title: 'Número' },
-    },
-    {
-      accessorKey: 'date',
-      header: 'Fecha',
-      meta: { title: 'Fecha' },
-      cell: ({ row }) => moment(row.original.date).format('DD/MM/YYYY'),
-    },
-    {
-      accessorKey: 'supplier',
-      header: 'Proveedor',
-      meta: { title: 'Proveedor' },
-      cell: ({ row }) => row.original.supplier.tradeName || row.original.supplier.businessName,
-    },
-    {
-      accessorKey: 'totalAmount',
-      header: 'Monto Total',
-      meta: { title: 'Monto Total' },
-      cell: ({ row }) => (
-        <span className="font-medium">
-          ${row.original.totalAmount.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </span>
-      ),
-    },
-    {
-      accessorKey: '_count.items',
-      header: 'Facturas',
-      meta: { title: 'Facturas' },
-      cell: ({ row }) => row.original._count.items,
-    },
-    {
-      accessorKey: '_count.payments',
-      header: 'Pagos',
-      meta: { title: 'Pagos' },
-      cell: ({ row }) => row.original._count.payments,
-    },
-    {
-      accessorKey: 'status',
-      header: 'Estado',
-      meta: { title: 'Estado' },
-      cell: ({ row }) => (
-        <Badge variant={PAYMENT_ORDER_STATUS_BADGES[row.original.status]}>
-          {PAYMENT_ORDER_STATUS_LABELS[row.original.status]}
-        </Badge>
-      ),
-    },
-    {
-      id: 'actions',
-      header: 'Acciones',
-      meta: { title: 'Acciones' },
-      cell: ({ row }) => {
-        const paymentOrder = row.original;
-
-        return (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 p-0">
-                <span className="sr-only">Abrir menú</span>
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={() => {
-                  setSelectedPaymentOrderId(paymentOrder.id);
-                  setDetailModalOpen(true);
-                }}
-              >
-                <Eye className="mr-2 h-4 w-4" />
-                Ver Detalle
-              </DropdownMenuItem>
-
-              <DropdownMenuItem
-                onClick={() => {
-                  window.open(`/api/payment-orders/${paymentOrder.id}/pdf`, '_blank');
-                }}
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Descargar PDF
-              </DropdownMenuItem>
-
-              {paymentOrder.status === 'DRAFT' && (
-                <>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setSelectedPaymentOrderId(paymentOrder.id);
-                      setEditModalOpen(true);
-                    }}
-                  >
-                    <Edit className="mr-2 h-4 w-4" />
-                    Editar
-                  </DropdownMenuItem>
-
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setSelectedPaymentOrderId(paymentOrder.id);
-                      setConfirmDialogOpen(true);
-                    }}
-                  >
-                    <CheckCircle className="mr-2 h-4 w-4" />
-                    Confirmar Orden
-                  </DropdownMenuItem>
-
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setSelectedPaymentOrderId(paymentOrder.id);
-                      setDeleteDialogOpen(true);
-                    }}
-                    className="text-destructive"
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Eliminar
-                  </DropdownMenuItem>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        );
-      },
-    },
-  ];
+  const columns = useMemo(
+    () =>
+      getColumns({
+        onViewDetail: (order) => {
+          setSelectedPaymentOrderId(order.id);
+          setDetailModalOpen(true);
+        },
+        onEdit: (order) => {
+          setSelectedPaymentOrderId(order.id);
+          setEditModalOpen(true);
+        },
+        onConfirm: (order) => {
+          setSelectedPaymentOrderId(order.id);
+          setConfirmDialogOpen(true);
+        },
+        onDelete: (order) => {
+          setSelectedPaymentOrderId(order.id);
+          setDeleteDialogOpen(true);
+        },
+      }),
+    []
+  );
 
   return (
     <>
-      <DataTable<PaymentOrderListItem> columns={columns} data={paymentOrders} totalRows={paymentOrders.length} />
+      <DataTable
+        columns={columns}
+        data={data}
+        totalRows={totalRows}
+        searchParams={searchParams}
+        searchPlaceholder="Buscar órdenes de pago..."
+        toolbarActions={<CreatePaymentOrderModal onSuccess={() => router.refresh()} />}
+      />
 
       {/* Diálogo de Confirmación */}
       <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>

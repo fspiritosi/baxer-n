@@ -1,0 +1,1 @@
+export { ReceivingNoteDetail } from './ReceivingNoteDetail';

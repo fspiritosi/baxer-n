@@ -58,6 +58,16 @@ export async function AccountingSettings() {
               vatCreditAccountId: settings?.vatCreditAccountId ?? null,
               defaultCashAccountId: settings?.defaultCashAccountId ?? null,
               defaultBankAccountId: settings?.defaultBankAccountId ?? null,
+              expensesAccountId: settings?.expensesAccountId ?? null,
+              resultAccountId: settings?.resultAccountId ?? null,
+              withholdingIvaEmittedAccountId: settings?.withholdingIvaEmittedAccountId ?? null,
+              withholdingGananciasEmittedAccountId: settings?.withholdingGananciasEmittedAccountId ?? null,
+              withholdingIibbEmittedAccountId: settings?.withholdingIibbEmittedAccountId ?? null,
+              withholdingSussEmittedAccountId: settings?.withholdingSussEmittedAccountId ?? null,
+              withholdingIvaSufferedAccountId: settings?.withholdingIvaSufferedAccountId ?? null,
+              withholdingGananciasSufferedAccountId: settings?.withholdingGananciasSufferedAccountId ?? null,
+              withholdingIibbSufferedAccountId: settings?.withholdingIibbSufferedAccountId ?? null,
+              withholdingSussSufferedAccountId: settings?.withholdingSussSufferedAccountId ?? null,
             }}
           />
         </CardContent>

@@ -10,6 +10,7 @@ import { DataTable } from '@/shared/components/common/DataTable';
 import { Checkbox } from '@/shared/components/ui/checkbox';
 import { DollarSign, TrendingDown, TrendingUp } from 'lucide-react';
 import type { SupplierAccountStatement, SupplierInvoiceWithBalance, SupplierPayment } from '../actions.server';
+import { isCreditNote } from '@/modules/commercial/shared/voucher-utils';
 
 interface SupplierAccountStatementTabProps {
   accountStatement: SupplierAccountStatement;
@@ -107,11 +108,14 @@ export function _SupplierAccountStatementTab({ accountStatement }: SupplierAccou
       accessorKey: 'total',
       header: 'Total',
       meta: { title: 'Total' },
-      cell: ({ row }) => (
-        <div className="text-right font-medium">
-          ${row.original.total.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-        </div>
-      ),
+      cell: ({ row }) => {
+        const isNC = isCreditNote(row.original.voucherType);
+        return (
+          <div className={`text-right font-medium ${isNC ? 'text-green-600' : ''}`}>
+            {isNC ? '-' : ''}${row.original.total.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+          </div>
+        );
+      },
     },
     {
       accessorKey: 'paid',
@@ -127,13 +131,17 @@ export function _SupplierAccountStatementTab({ accountStatement }: SupplierAccou
       accessorKey: 'balance',
       header: 'Saldo',
       meta: { title: 'Saldo' },
-      cell: ({ row }) => (
-        <div className="text-right">
-          <span className={row.original.balance > 0 ? 'text-red-600 font-medium' : 'text-muted-foreground'}>
-            ${row.original.balance.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-          </span>
-        </div>
-      ),
+      cell: ({ row }) => {
+        const balance = row.original.balance;
+        const colorClass = balance < 0 ? 'text-green-600 font-medium' : balance > 0 ? 'text-red-600 font-medium' : 'text-muted-foreground';
+        return (
+          <div className="text-right">
+            <span className={colorClass}>
+              ${balance.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+            </span>
+          </div>
+        );
+      },
     },
     {
       accessorKey: 'status',
@@ -141,11 +149,20 @@ export function _SupplierAccountStatementTab({ accountStatement }: SupplierAccou
       meta: { title: 'Estado' },
       cell: ({ row }) => {
         const invoice = row.original;
+        const isNC = isCreditNote(invoice.voucherType);
+
+        if (isNC) {
+          const isFullyApplied = invoice.balance >= -0.01;
+          return isFullyApplied
+            ? <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Aplicada</Badge>
+            : <Badge variant="secondary">Sin aplicar</Badge>;
+        }
+
         const isOverdue =
           invoice.balance > 0 &&
           invoice.dueDate &&
           moment(invoice.dueDate).isBefore(moment(), 'day');
-        const isPaid = invoice.balance === 0;
+        const isPaid = invoice.balance <= 0.01;
 
         if (isPaid) {
           return <Badge variant="default">Pagada</Badge>;
@@ -211,6 +228,21 @@ export function _SupplierAccountStatementTab({ accountStatement }: SupplierAccou
       ),
     },
     {
+      id: 'withholdings',
+      header: 'Retenciones',
+      meta: { title: 'Retenciones' },
+      cell: ({ row }) => {
+        const total = row.original.withholdingsTotal;
+        return total > 0 ? (
+          <div className="text-right text-orange-600 font-medium">
+            ${total.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+          </div>
+        ) : (
+          <div className="text-right text-muted-foreground">-</div>
+        );
+      },
+    },
+    {
       accessorKey: 'totalAmount',
       header: 'Monto Total',
       meta: { title: 'Monto Total' },
@@ -228,33 +260,33 @@ export function _SupplierAccountStatementTab({ accountStatement }: SupplierAccou
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Facturado</CardTitle>
+            <CardTitle className="text-sm font-medium">Facturado</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
               ${summary.totalInvoiced.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
             </div>
-            <p className="text-xs text-muted-foreground">Facturas confirmadas</p>
+            <p className="text-xs text-muted-foreground">Facturas y ND confirmadas</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Pagado</CardTitle>
+            <CardTitle className="text-sm font-medium">Pagado</CardTitle>
             <TrendingDown className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
               ${summary.totalPaid.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
             </div>
-            <p className="text-xs text-muted-foreground">Pagos confirmados</p>
+            <p className="text-xs text-muted-foreground">Pagos + NC aplicadas</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Saldo Pendiente</CardTitle>
+            <CardTitle className="text-sm font-medium">Saldo</CardTitle>
             <TrendingUp className={`h-4 w-4 ${summary.totalBalance > 0 ? 'text-red-600' : 'text-muted-foreground'}`} />
           </CardHeader>
           <CardContent>

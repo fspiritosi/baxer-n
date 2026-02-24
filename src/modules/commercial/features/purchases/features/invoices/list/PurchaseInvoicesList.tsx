@@ -29,7 +29,7 @@ export async function PurchaseInvoicesList({ searchParams }: Props) {
         </Button>
       </div>
 
-      <_PurchaseInvoicesTable initialData={initialData} searchParams={searchParams} />
+      <_PurchaseInvoicesTable data={initialData.data} totalRows={initialData.total} searchParams={searchParams} />
     </div>
   );
 }

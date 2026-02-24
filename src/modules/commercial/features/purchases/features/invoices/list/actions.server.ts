@@ -14,6 +14,8 @@ import {
 import type { PurchaseInvoiceFormInput } from '../shared/validators';
 import type { VoucherType } from '@/generated/prisma/enums';
 import { createJournalEntryForPurchaseInvoice } from '@/modules/accounting/features/integrations/commercial';
+import { isCreditNote, isDebitNote } from '@/modules/commercial/shared/voucher-utils';
+import { applyPurchaseCreditNote } from '@/modules/commercial/shared/credit-note-compensation';
 
 // ============================================
 // QUERIES
@@ -63,6 +65,18 @@ export async function getPurchaseInvoicesPaginated(searchParams: DataTableSearch
                 select: {
                   code: true,
                   name: true,
+                  trackStock: true,
+                },
+              },
+            },
+          },
+          receivingNotes: {
+            where: { status: 'CONFIRMED' },
+            select: {
+              lines: {
+                select: {
+                  productId: true,
+                  quantity: true,
                 },
               },
             },
@@ -73,22 +87,74 @@ export async function getPurchaseInvoicesPaginated(searchParams: DataTableSearch
     ]);
 
     // Convertir Decimals a Numbers para Client Components
-    const data = invoices.map((invoice) => ({
-      ...invoice,
-      subtotal: Number(invoice.subtotal),
-      vatAmount: Number(invoice.vatAmount),
-      otherTaxes: Number(invoice.otherTaxes),
-      total: Number(invoice.total),
-      lines: invoice.lines.map((line) => ({
-        ...line,
-        quantity: Number(line.quantity),
-        unitCost: Number(line.unitCost),
-        vatRate: Number(line.vatRate),
-        vatAmount: Number(line.vatAmount),
-        subtotal: Number(line.subtotal),
-        total: Number(line.total),
-      })),
-    }));
+    const data = invoices.map((invoice) => {
+      const isConfirmed = invoice.status === 'CONFIRMED';
+      const isRegularInvoice =
+        !isCreditNote(invoice.voucherType) && !isDebitNote(invoice.voucherType);
+
+      // Calcular estado de recepción: null | 'pending' | 'partial' | 'complete'
+      let receptionStatus: 'pending' | 'partial' | 'complete' | null = null;
+
+      if (isConfirmed && isRegularInvoice) {
+        // Solo líneas con productos que controlan stock
+        const stockLines = invoice.lines.filter((l) => l.product?.trackStock && l.productId);
+
+        if (stockLines.length > 0) {
+          // Sumar cantidades recibidas por producto desde remitos confirmados
+          const receivedByProduct = new Map<string, number>();
+          for (const rn of invoice.receivingNotes) {
+            for (const rnLine of rn.lines) {
+              const current = receivedByProduct.get(rnLine.productId) ?? 0;
+              receivedByProduct.set(rnLine.productId, current + Number(rnLine.quantity));
+            }
+          }
+
+          // Comparar cada línea de factura con lo recibido
+          let allFullyReceived = true;
+          let anyReceived = false;
+
+          for (const line of stockLines) {
+            const invoicedQty = Number(line.quantity);
+            const receivedQty = receivedByProduct.get(line.productId!) ?? 0;
+
+            if (receivedQty >= invoicedQty) {
+              anyReceived = true;
+            } else if (receivedQty > 0) {
+              anyReceived = true;
+              allFullyReceived = false;
+            } else {
+              allFullyReceived = false;
+            }
+          }
+
+          if (allFullyReceived && anyReceived) {
+            receptionStatus = 'complete';
+          } else if (anyReceived) {
+            receptionStatus = 'partial';
+          } else {
+            receptionStatus = 'pending';
+          }
+        }
+      }
+
+      return {
+        ...invoice,
+        subtotal: Number(invoice.subtotal),
+        vatAmount: Number(invoice.vatAmount),
+        otherTaxes: Number(invoice.otherTaxes),
+        total: Number(invoice.total),
+        receptionStatus,
+        lines: invoice.lines.map((line) => ({
+          ...line,
+          quantity: Number(line.quantity),
+          unitCost: Number(line.unitCost),
+          vatRate: Number(line.vatRate),
+          vatAmount: Number(line.vatAmount),
+          subtotal: Number(line.subtotal),
+          total: Number(line.total),
+        })),
+      };
+    });
 
     return { data, total };
   } catch (error) {
@@ -130,6 +196,7 @@ export async function getPurchaseInvoiceById(id: string) {
                 code: true,
                 name: true,
                 unitOfMeasure: true,
+                trackStock: true,
               },
             },
           },
@@ -138,6 +205,93 @@ export async function getPurchaseInvoiceById(id: string) {
           select: {
             name: true,
             taxId: true,
+          },
+        },
+        // Documentos vinculados
+        creditDebitNotes: {
+          select: {
+            id: true,
+            fullNumber: true,
+            voucherType: true,
+            total: true,
+            status: true,
+            issueDate: true,
+          },
+          orderBy: { issueDate: 'desc' },
+        },
+        originalInvoice: {
+          select: {
+            id: true,
+            fullNumber: true,
+            voucherType: true,
+          },
+        },
+        paymentOrderItems: {
+          select: {
+            amount: true,
+            paymentOrder: {
+              select: {
+                id: true,
+                fullNumber: true,
+                date: true,
+                status: true,
+                totalAmount: true,
+              },
+            },
+          },
+        },
+        creditNoteApplicationsReceived: {
+          select: {
+            amount: true,
+            appliedAt: true,
+            creditNote: {
+              select: {
+                id: true,
+                fullNumber: true,
+                voucherType: true,
+                total: true,
+              },
+            },
+          },
+        },
+        creditNoteApplicationsGiven: {
+          select: {
+            amount: true,
+            appliedAt: true,
+            invoice: {
+              select: {
+                id: true,
+                fullNumber: true,
+                voucherType: true,
+                total: true,
+              },
+            },
+          },
+        },
+        purchaseOrder: {
+          select: {
+            id: true,
+            fullNumber: true,
+            status: true,
+            invoicingStatus: true,
+          },
+        },
+        receivingNotes: {
+          orderBy: { receptionDate: 'desc' },
+          select: {
+            id: true,
+            fullNumber: true,
+            receptionDate: true,
+            status: true,
+            warehouse: {
+              select: { name: true },
+            },
+            lines: {
+              select: {
+                productId: true,
+                quantity: true,
+              },
+            },
           },
         },
       },
@@ -151,6 +305,51 @@ export async function getPurchaseInvoiceById(id: string) {
       throw new Error('No tienes permiso para ver esta factura');
     }
 
+    // Calcular estado de recepción: null | 'pending' | 'partial' | 'complete'
+    const isRegularInvoice =
+      !isCreditNote(invoice.voucherType) && !isDebitNote(invoice.voucherType);
+    let receptionStatus: 'pending' | 'partial' | 'complete' | null = null;
+
+    if (invoice.status === 'CONFIRMED' && isRegularInvoice) {
+      const stockLines = invoice.lines.filter((l) => l.product?.trackStock && l.productId);
+
+      if (stockLines.length > 0) {
+        const confirmedRNs = invoice.receivingNotes.filter((rn) => rn.status === 'CONFIRMED');
+        const receivedByProduct = new Map<string, number>();
+        for (const rn of confirmedRNs) {
+          for (const rnLine of rn.lines) {
+            const current = receivedByProduct.get(rnLine.productId) ?? 0;
+            receivedByProduct.set(rnLine.productId, current + Number(rnLine.quantity));
+          }
+        }
+
+        let allFullyReceived = true;
+        let anyReceived = false;
+
+        for (const line of stockLines) {
+          const invoicedQty = Number(line.quantity);
+          const receivedQty = receivedByProduct.get(line.productId!) ?? 0;
+
+          if (receivedQty >= invoicedQty) {
+            anyReceived = true;
+          } else if (receivedQty > 0) {
+            anyReceived = true;
+            allFullyReceived = false;
+          } else {
+            allFullyReceived = false;
+          }
+        }
+
+        if (allFullyReceived && anyReceived) {
+          receptionStatus = 'complete';
+        } else if (anyReceived) {
+          receptionStatus = 'partial';
+        } else {
+          receptionStatus = 'pending';
+        }
+      }
+    }
+
     // Convertir Decimals a Numbers para Client Components
     return {
       ...invoice,
@@ -158,6 +357,7 @@ export async function getPurchaseInvoiceById(id: string) {
       vatAmount: Number(invoice.vatAmount),
       otherTaxes: Number(invoice.otherTaxes),
       total: Number(invoice.total),
+      receptionStatus,
       lines: invoice.lines.map((line) => ({
         ...line,
         quantity: Number(line.quantity),
@@ -166,6 +366,33 @@ export async function getPurchaseInvoiceById(id: string) {
         vatAmount: Number(line.vatAmount),
         subtotal: Number(line.subtotal),
         total: Number(line.total),
+      })),
+      creditDebitNotes: invoice.creditDebitNotes.map((cn) => ({
+        ...cn,
+        total: Number(cn.total),
+      })),
+      paymentOrderItems: invoice.paymentOrderItems.map((item) => ({
+        amount: Number(item.amount),
+        paymentOrder: {
+          ...item.paymentOrder,
+          totalAmount: Number(item.paymentOrder.totalAmount),
+        },
+      })),
+      creditNoteApplicationsReceived: invoice.creditNoteApplicationsReceived.map((app) => ({
+        amount: Number(app.amount),
+        appliedAt: app.appliedAt,
+        creditNote: {
+          ...app.creditNote,
+          total: Number(app.creditNote.total),
+        },
+      })),
+      creditNoteApplicationsGiven: invoice.creditNoteApplicationsGiven.map((app) => ({
+        amount: Number(app.amount),
+        appliedAt: app.appliedAt,
+        invoice: {
+          ...app.invoice,
+          total: Number(app.invoice.total),
+        },
       })),
     };
   } catch (error) {
@@ -221,7 +448,7 @@ export async function getProductsForSelect() {
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    return await prisma.product.findMany({
+    const products = await prisma.product.findMany({
       where: {
         companyId,
         status: 'ACTIVE',
@@ -238,6 +465,12 @@ export async function getProductsForSelect() {
       },
       orderBy: { name: 'asc' },
     });
+
+    return products.map((p) => ({
+      ...p,
+      costPrice: Number(p.costPrice),
+      vatRate: Number(p.vatRate),
+    }));
   } catch (error) {
     logger.error('Error al obtener productos', {
       data: { error, companyId },
@@ -249,6 +482,132 @@ export async function getProductsForSelect() {
 // ============================================
 // MUTATIONS
 // ============================================
+
+/**
+ * Obtener facturas de un proveedor para select de factura original (NC/ND)
+ */
+export async function getSupplierInvoicesForSelect(supplierId: string) {
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  const invoices = await prisma.purchaseInvoice.findMany({
+    where: {
+      companyId,
+      supplierId,
+      status: { in: ['CONFIRMED', 'PAID', 'PARTIAL_PAID'] },
+      voucherType: {
+        notIn: [
+          'NOTA_CREDITO_A', 'NOTA_CREDITO_B', 'NOTA_CREDITO_C',
+          'NOTA_DEBITO_A', 'NOTA_DEBITO_B', 'NOTA_DEBITO_C',
+        ],
+      },
+    },
+    select: {
+      id: true,
+      fullNumber: true,
+      issueDate: true,
+      total: true,
+      voucherType: true,
+    },
+    orderBy: { issueDate: 'desc' },
+    take: 50,
+  });
+
+  return invoices.map((inv) => ({
+    id: inv.id,
+    fullNumber: inv.fullNumber,
+    issueDate: inv.issueDate,
+    total: Number(inv.total),
+    voucherType: inv.voucherType,
+  }));
+}
+
+/**
+ * Obtiene OCs aprobadas de un proveedor para vincular a factura de compra
+ */
+export async function getApprovedPurchaseOrdersForInvoicing(supplierId: string) {
+  const companyId = await getActiveCompanyId();
+  if (!companyId) return [];
+
+  try {
+    const orders = await prisma.purchaseOrder.findMany({
+      where: {
+        companyId,
+        supplierId,
+        status: { in: ['APPROVED', 'PARTIALLY_RECEIVED', 'COMPLETED'] },
+        invoicingStatus: { not: 'FULLY_INVOICED' },
+      },
+      select: {
+        id: true,
+        fullNumber: true,
+        issueDate: true,
+        total: true,
+        invoicingStatus: true,
+      },
+      orderBy: { issueDate: 'desc' },
+    });
+
+    return orders.map((o) => ({ ...o, total: Number(o.total) }));
+  } catch (error) {
+    logger.error('Error al obtener OCs para facturación', {
+      data: { error: error instanceof Error ? error.message : String(error), supplierId },
+    });
+    return [];
+  }
+}
+
+/**
+ * Obtiene líneas de una OC con cantidades pendientes de facturar
+ */
+export async function getPurchaseOrderLinesForInvoicing(orderId: string) {
+  const companyId = await getActiveCompanyId();
+  if (!companyId) return [];
+
+  try {
+    const lines = await prisma.purchaseOrderLine.findMany({
+      where: {
+        orderId,
+        order: { companyId },
+      },
+      include: {
+        product: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            unitOfMeasure: true,
+          },
+        },
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    return lines
+      .map((line) => {
+        const qty = Number(line.quantity);
+        const invoiced = Number(line.invoicedQty);
+        const pendingQty = Math.max(0, qty - invoiced);
+
+        return {
+          id: line.id,
+          productId: line.productId,
+          description: line.description,
+          quantity: qty,
+          invoicedQty: invoiced,
+          pendingQty,
+          unitCost: Number(line.unitCost),
+          vatRate: Number(line.vatRate),
+          product: line.product,
+        };
+      })
+      .filter((line) => line.pendingQty > 0);
+  } catch (error) {
+    logger.error('Error al obtener líneas de OC para facturación', {
+      data: { error: error instanceof Error ? error.message : String(error), orderId },
+    });
+    return [];
+  }
+}
 
 /**
  * Crea una nueva factura de compra en estado DRAFT
@@ -286,6 +645,7 @@ export async function createPurchaseInvoice(input: PurchaseInvoiceFormInput) {
         vatAmount: lineVat,
         subtotal: lineSubtotal,
         total: lineTotal,
+        purchaseOrderLineId: line.purchaseOrderLineId || null,
       };
     });
 
@@ -319,6 +679,8 @@ export async function createPurchaseInvoice(input: PurchaseInvoiceFormInput) {
         issueDate: input.issueDate,
         dueDate: input.dueDate || null,
         cae: input.cae || null,
+        originalInvoiceId: input.originalInvoiceId || null,
+        purchaseOrderId: input.purchaseOrderId || null,
         validated: false,
         subtotal,
         vatAmount,
@@ -353,7 +715,7 @@ export async function createPurchaseInvoice(input: PurchaseInvoiceFormInput) {
     });
 
     revalidatePath('/dashboard/commercial/purchases');
-    return invoice;
+    return { success: true, id: invoice.id };
   } catch (error) {
     logger.error('Error al crear factura de compra', {
       data: { error, input, companyId, userId },
@@ -421,6 +783,7 @@ export async function updatePurchaseInvoice(id: string, input: PurchaseInvoiceFo
         vatAmount: lineVat,
         subtotal: lineSubtotal,
         total: lineTotal,
+        purchaseOrderLineId: line.purchaseOrderLineId || null,
       };
     });
 
@@ -462,6 +825,7 @@ export async function updatePurchaseInvoice(id: string, input: PurchaseInvoiceFo
           issueDate: input.issueDate,
           dueDate: input.dueDate || null,
           cae: input.cae || null,
+          purchaseOrderId: input.purchaseOrderId || null,
           subtotal,
           vatAmount,
           otherTaxes: 0,
@@ -495,7 +859,7 @@ export async function updatePurchaseInvoice(id: string, input: PurchaseInvoiceFo
 
     revalidatePath('/dashboard/commercial/purchases');
     revalidatePath(`/dashboard/commercial/purchases/${id}`);
-    return invoice;
+    return { success: true, id: invoice.id };
   } catch (error) {
     logger.error('Error al actualizar factura de compra', {
       data: { error, id, input, companyId, userId },
@@ -538,22 +902,31 @@ export async function confirmPurchaseInvoice(id: string) {
       throw new Error('Solo se pueden confirmar facturas en estado borrador');
     }
 
-    // Obtener almacén principal para incrementar stock
-    const mainWarehouse = await prisma.warehouse.findFirst({
-      where: {
-        companyId,
-        type: 'MAIN',
-        isActive: true,
-      },
-    });
+    // Confirmar factura en transacción
+    // NOTA: Las FC normales NO generan ingreso de stock. El stock solo ingresa vía Remitos de Recepción.
+    // Las NC de compra SÍ decrementan stock (devoluciones al proveedor).
+    const isND = isDebitNote(invoice.voucherType);
+    const isNC = isCreditNote(invoice.voucherType);
 
-    if (!mainWarehouse) {
-      throw new Error(
-        'No se encontró un almacén principal activo. Configura uno antes de confirmar compras.'
-      );
+    // Almacén principal solo necesario para NC (decremento de stock por devolución)
+    let mainWarehouse: { id: string } | null = null;
+    if (isNC) {
+      mainWarehouse = await prisma.warehouse.findFirst({
+        where: {
+          companyId,
+          type: 'MAIN',
+          isActive: true,
+        },
+        select: { id: true },
+      });
+
+      if (!mainWarehouse) {
+        throw new Error(
+          'No se encontró un almacén principal activo. Configura uno antes de confirmar notas de crédito.'
+        );
+      }
     }
 
-    // Confirmar factura y actualizar stock en transacción
     const result = await prisma.$transaction(async (tx) => {
       // Actualizar estado de la factura
       const updatedInvoice = await tx.purchaseInvoice.update({
@@ -571,55 +944,68 @@ export async function confirmPurchaseInvoice(id: string) {
         },
       });
 
-      // Actualizar stock para cada línea que tenga producto
-      for (const line of invoice.lines) {
-        if (!line.productId || !line.product) continue;
+      // NC de compra: devolvemos al proveedor → decrementar stock
+      if (isNC && mainWarehouse) {
+        for (const line of invoice.lines) {
+          if (!line.productId || !line.product) continue;
+          if (!line.product.trackStock) continue;
 
-        // Solo actualizar stock si el producto tiene trackStock = true
-        if (!line.product.trackStock) continue;
+          const quantity = Number(line.quantity);
 
-        const quantity = Number(line.quantity);
-
-        // Incrementar stock en almacén principal
-        await tx.warehouseStock.upsert({
-          where: {
-            warehouseId_productId: {
+          await tx.warehouseStock.upsert({
+            where: {
+              warehouseId_productId: {
+                warehouseId: mainWarehouse.id,
+                productId: line.productId,
+              },
+            },
+            create: {
               warehouseId: mainWarehouse.id,
               productId: line.productId,
+              quantity: -quantity,
+              reservedQty: 0,
+              availableQty: -quantity,
             },
-          },
-          create: {
-            warehouseId: mainWarehouse.id,
-            productId: line.productId,
-            quantity,
-            reservedQty: 0,
-            availableQty: quantity,
-          },
-          update: {
-            quantity: {
-              increment: quantity,
+            update: {
+              quantity: {
+                decrement: quantity,
+              },
+              availableQty: {
+                decrement: quantity,
+              },
             },
-            availableQty: {
-              increment: quantity,
-            },
-          },
-        });
+          });
 
-        // Registrar movimiento de stock
-        await tx.stockMovement.create({
-          data: {
-            companyId,
-            warehouseId: mainWarehouse.id,
-            productId: line.productId,
-            type: 'PURCHASE',
-            quantity,
-            referenceType: 'purchase_invoice',
-            referenceId: invoice.id,
-            notes: `Compra ${invoice.fullNumber} - ${line.product.name}`,
-            date: invoice.issueDate,
-            createdBy: userId,
-          },
-        });
+          await tx.stockMovement.create({
+            data: {
+              companyId,
+              warehouseId: mainWarehouse.id,
+              productId: line.productId,
+              type: 'RETURN',
+              quantity,
+              referenceType: 'purchase_invoice',
+              referenceId: invoice.id,
+              notes: `NC Compra ${invoice.fullNumber} - ${line.product.name}`,
+              date: invoice.issueDate,
+              createdBy: userId,
+            },
+          });
+        }
+      }
+
+      // Incrementar invoicedQty en líneas de OC vinculadas (solo facturas regulares)
+      if (invoice.purchaseOrderId && !isND && !isNC) {
+        for (const line of invoice.lines) {
+          if (line.purchaseOrderLineId) {
+            await tx.purchaseOrderLine.update({
+              where: { id: line.purchaseOrderLineId },
+              data: {
+                invoicedQty: { increment: line.quantity },
+              },
+            });
+          }
+        }
+        await updatePurchaseOrderInvoicingStatus(tx, invoice.purchaseOrderId);
       }
 
       // Crear asiento contable automáticamente
@@ -644,10 +1030,20 @@ export async function confirmPurchaseInvoice(id: string) {
         // No lanzar error para no interrumpir la confirmación de la factura
       }
 
+      // Auto-compensar NC contra facturas/ND pendientes del mismo proveedor
+      if (isCreditNote(updatedInvoice.voucherType)) {
+        await applyPurchaseCreditNote(tx, {
+          id: updatedInvoice.id,
+          total: updatedInvoice.total,
+          supplierId: updatedInvoice.supplierId,
+          originalInvoiceId: updatedInvoice.originalInvoiceId,
+        }, companyId);
+      }
+
       return updatedInvoice;
     });
 
-    logger.info('Factura de compra confirmada y stock incrementado', {
+    logger.info('Factura de compra confirmada', {
       data: {
         invoiceId: id,
         fullNumber: invoice.fullNumber,
@@ -659,7 +1055,28 @@ export async function confirmPurchaseInvoice(id: string) {
     revalidatePath('/dashboard/commercial/purchases');
     revalidatePath(`/dashboard/commercial/purchases/${id}`);
     revalidatePath('/dashboard/commercial/stock');
-    return result;
+    if (invoice.purchaseOrderId) {
+      revalidatePath(`/dashboard/commercial/purchase-orders/${invoice.purchaseOrderId}`);
+    }
+
+    // Determinar si la FC necesita un remito de recepción
+    const hasTrackStockProducts = invoice.lines.some(
+      (l) => l.product?.trackStock
+    );
+    let needsReceivingNote = false;
+    if (hasTrackStockProducts && !isND && !isNC) {
+      const confirmedRNCount = await prisma.receivingNote.count({
+        where: { purchaseInvoiceId: id, status: 'CONFIRMED' },
+      });
+      needsReceivingNote = confirmedRNCount === 0;
+    }
+
+    return {
+      success: true,
+      id: result.id,
+      needsReceivingNote,
+      supplierId: invoice.supplierId,
+    };
   } catch (error) {
     logger.error('Error al confirmar factura de compra', {
       data: { error, id, companyId, userId },
@@ -669,7 +1086,9 @@ export async function confirmPurchaseInvoice(id: string) {
 }
 
 /**
- * Cancela una factura de compra y revierte el stock si estaba confirmada
+ * Cancela una factura de compra.
+ * Solo revierte stock si es una NC (nota de crédito) que había decrementado stock.
+ * Las FC normales no generan stock, por lo que no hay nada que revertir.
  */
 export async function cancelPurchaseInvoice(id: string) {
   const { userId } = await auth();
@@ -706,19 +1125,26 @@ export async function cancelPurchaseInvoice(id: string) {
       throw new Error('No se puede cancelar una factura pagada o parcialmente pagada');
     }
 
-    // Obtener almacén principal
-    const mainWarehouse = await prisma.warehouse.findFirst({
-      where: {
-        companyId,
-        type: 'MAIN',
-        isActive: true,
-      },
-    });
+    // Solo las NC afectan stock (devoluciones), las FC normales no
+    const isNC = isCreditNote(invoice.voucherType);
 
-    // Cancelar factura y revertir stock si estaba confirmada
+    // Obtener almacén principal solo si es NC (necesitamos revertir stock)
+    let mainWarehouse: { id: string } | null = null;
+    if (isNC) {
+      mainWarehouse = await prisma.warehouse.findFirst({
+        where: {
+          companyId,
+          type: 'MAIN',
+          isActive: true,
+        },
+        select: { id: true },
+      });
+    }
+
+    // Cancelar factura y revertir stock si era NC confirmada
     const result = await prisma.$transaction(async (tx) => {
-      // Si estaba confirmada, revertir stock
-      if (invoice.status === 'CONFIRMED' && mainWarehouse) {
+      // Si era NC confirmada, revertir el decremento de stock (devolver stock)
+      if (invoice.status === 'CONFIRMED' && isNC && mainWarehouse) {
         for (const line of invoice.lines) {
           if (!line.productId || !line.product || !line.product.trackStock) {
             continue;
@@ -726,37 +1152,27 @@ export async function cancelPurchaseInvoice(id: string) {
 
           const quantity = Number(line.quantity);
 
-          // Verificar que hay stock suficiente para revertir
-          const currentStock = await tx.warehouseStock.findUnique({
+          // Incrementar stock (revertir la devolución)
+          await tx.warehouseStock.upsert({
             where: {
               warehouseId_productId: {
                 warehouseId: mainWarehouse.id,
                 productId: line.productId,
               },
             },
-          });
-
-          if (!currentStock || Number(currentStock.availableQty) < quantity) {
-            throw new Error(
-              `No hay stock suficiente del producto "${line.product.name}" para cancelar la factura. ` +
-              `Se necesitan ${quantity} unidades disponibles.`
-            );
-          }
-
-          // Decrementar stock
-          await tx.warehouseStock.update({
-            where: {
-              warehouseId_productId: {
-                warehouseId: mainWarehouse.id,
-                productId: line.productId,
-              },
+            create: {
+              warehouseId: mainWarehouse.id,
+              productId: line.productId,
+              quantity,
+              reservedQty: 0,
+              availableQty: quantity,
             },
-            data: {
+            update: {
               quantity: {
-                decrement: quantity,
+                increment: quantity,
               },
               availableQty: {
-                decrement: quantity,
+                increment: quantity,
               },
             },
           });
@@ -768,15 +1184,30 @@ export async function cancelPurchaseInvoice(id: string) {
               warehouseId: mainWarehouse.id,
               productId: line.productId,
               type: 'ADJUSTMENT',
-              quantity: -quantity,
+              quantity,
               referenceType: 'purchase_invoice_cancel',
               referenceId: invoice.id,
-              notes: `Cancelación de compra ${invoice.fullNumber} - ${line.product.name}`,
+              notes: `Cancelación NC Compra ${invoice.fullNumber} - ${line.product.name}`,
               date: new Date(),
               createdBy: userId,
             },
           });
         }
+      }
+
+      // Decrementar invoicedQty en líneas de OC vinculadas
+      if (invoice.purchaseOrderId && invoice.status === 'CONFIRMED') {
+        for (const line of invoice.lines) {
+          if (line.purchaseOrderLineId) {
+            await tx.purchaseOrderLine.update({
+              where: { id: line.purchaseOrderLineId },
+              data: {
+                invoicedQty: { decrement: line.quantity },
+              },
+            });
+          }
+        }
+        await updatePurchaseOrderInvoicingStatus(tx, invoice.purchaseOrderId);
       }
 
       // Actualizar estado de la factura
@@ -809,13 +1240,54 @@ export async function cancelPurchaseInvoice(id: string) {
     revalidatePath('/dashboard/commercial/purchases');
     revalidatePath(`/dashboard/commercial/purchases/${id}`);
     revalidatePath('/dashboard/commercial/stock');
-    return result;
+    if (invoice.purchaseOrderId) {
+      revalidatePath(`/dashboard/commercial/purchase-orders/${invoice.purchaseOrderId}`);
+    }
+    return { success: true, id: result.id };
   } catch (error) {
     logger.error('Error al cancelar factura de compra', {
       data: { error, id, companyId, userId },
     });
     throw error;
   }
+}
+
+// ============================================
+// HELPERS
+// ============================================
+
+/**
+ * Recalcula el estado de facturación de una OC basado en las cantidades facturadas
+ */
+async function updatePurchaseOrderInvoicingStatus(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  purchaseOrderId: string
+) {
+  const poLines = await tx.purchaseOrderLine.findMany({
+    where: { orderId: purchaseOrderId },
+    select: { quantity: true, invoicedQty: true },
+  });
+
+  const allFullyInvoiced = poLines.every(
+    (line) => Number(line.invoicedQty) >= Number(line.quantity)
+  );
+  const anyPartiallyInvoiced = poLines.some(
+    (line) => Number(line.invoicedQty) > 0
+  );
+
+  let newStatus: 'NOT_INVOICED' | 'PARTIALLY_INVOICED' | 'FULLY_INVOICED';
+  if (allFullyInvoiced) {
+    newStatus = 'FULLY_INVOICED';
+  } else if (anyPartiallyInvoiced) {
+    newStatus = 'PARTIALLY_INVOICED';
+  } else {
+    newStatus = 'NOT_INVOICED';
+  }
+
+  await tx.purchaseOrder.update({
+    where: { id: purchaseOrderId },
+    data: { invoicingStatus: newStatus },
+  });
 }
 
 // ============================================

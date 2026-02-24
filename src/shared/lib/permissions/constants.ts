@@ -34,10 +34,16 @@ export const MODULES = {
   'commercial.points-of-sale': 'commercial.points-of-sale',
   'commercial.invoices': 'commercial.invoices',
   'commercial.purchases': 'commercial.purchases',
+  'commercial.purchase-orders': 'commercial.purchase-orders',
+  'commercial.receiving-notes': 'commercial.receiving-notes',
   'commercial.treasury.cash-registers': 'commercial.treasury.cash-registers',
   'commercial.treasury.bank-accounts': 'commercial.treasury.bank-accounts',
   'commercial.treasury.receipts': 'commercial.treasury.receipts',
   'commercial.treasury.payment-orders': 'commercial.treasury.payment-orders',
+  'commercial.treasury.checks': 'commercial.treasury.checks',
+  'commercial.treasury.projections': 'commercial.treasury.projections',
+  'commercial.treasury.cashflow': 'commercial.treasury.cashflow',
+  'commercial.expenses': 'commercial.expenses',
 
   // Configuración de Empresa - General
   'company.general.users': 'company.general.users',
@@ -69,6 +75,8 @@ export const MODULES = {
   'accounting.entries': 'accounting.entries',
   'accounting.reports': 'accounting.reports',
   'accounting.settings': 'accounting.settings',
+  'accounting.fiscal-year-close': 'accounting.fiscal-year-close',
+  'accounting.recurring-entries': 'accounting.recurring-entries',
 } as const;
 
 export type Module = (typeof MODULES)[keyof typeof MODULES];
@@ -82,6 +90,7 @@ export const ACTIONS = {
   create: 'create',
   update: 'update',
   delete: 'delete',
+  approve: 'approve',
 } as const;
 
 export type Action = (typeof ACTIONS)[keyof typeof ACTIONS];
@@ -112,10 +121,16 @@ export const MODULE_LABELS: Record<Module, string> = {
   'commercial.points-of-sale': 'Puntos de Venta',
   'commercial.invoices': 'Facturas de Venta',
   'commercial.purchases': 'Facturas de Compra',
+  'commercial.purchase-orders': 'Órdenes de Compra',
+  'commercial.receiving-notes': 'Remitos de Recepción',
   'commercial.treasury.cash-registers': 'Cajas',
   'commercial.treasury.bank-accounts': 'Bancos',
   'commercial.treasury.receipts': 'Recibos de Cobro',
   'commercial.treasury.payment-orders': 'Órdenes de Pago',
+  'commercial.treasury.checks': 'Cheques',
+  'commercial.treasury.projections': 'Proyecciones',
+  'commercial.treasury.cashflow': 'Flujo de Caja',
+  'commercial.expenses': 'Gastos',
 
   'company.general.users': 'Usuarios',
   'company.general.roles': 'Roles',
@@ -143,6 +158,8 @@ export const MODULE_LABELS: Record<Module, string> = {
   'accounting.entries': 'Asientos',
   'accounting.reports': 'Informes',
   'accounting.settings': 'Configuración Contable',
+  'accounting.fiscal-year-close': 'Cierre de Ejercicio',
+  'accounting.recurring-entries': 'Asientos Recurrentes',
 };
 
 export const ACTION_LABELS: Record<Action, string> = {
@@ -150,6 +167,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   create: 'Crear',
   update: 'Editar',
   delete: 'Eliminar',
+  approve: 'Aprobar',
 };
 
 // ============================================
@@ -179,10 +197,16 @@ export const MODULE_GROUPS = {
       'commercial.points-of-sale',
       'commercial.invoices',
       'commercial.purchases',
+      'commercial.purchase-orders',
+      'commercial.receiving-notes',
       'commercial.treasury.cash-registers',
       'commercial.treasury.bank-accounts',
       'commercial.treasury.receipts',
       'commercial.treasury.payment-orders',
+      'commercial.treasury.checks',
+      'commercial.treasury.projections',
+      'commercial.treasury.cashflow',
+      'commercial.expenses',
     ] as Module[],
   },
   configuracionGeneral: {

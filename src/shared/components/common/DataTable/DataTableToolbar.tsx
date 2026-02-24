@@ -31,6 +31,7 @@ export function DataTableToolbar<TData>({
   searchColumn,
   facetedFilters = [],
   showColumnToggle = true,
+  showSearch = true,
   toolbarActions,
 }: DataTableToolbarProps<TData>) {
   const isFiltered = table.getState().columnFilters.length > 0;
@@ -52,13 +53,15 @@ export function DataTableToolbar<TData>({
     <div className="flex items-center justify-between">
       <div className="flex flex-1 items-center space-x-2">
         {/* Input de búsqueda */}
-        <Input
-          placeholder={searchPlaceholder}
-          value={searchValue}
-          onChange={(event) => handleSearchChange(event.target.value)}
-          className="h-8 w-[150px] lg:w-[250px]"
-          data-testid="search-input"
-        />
+        {showSearch && (
+          <Input
+            placeholder={searchPlaceholder}
+            value={searchValue}
+            onChange={(event) => handleSearchChange(event.target.value)}
+            className="h-8 w-[150px] lg:w-[250px]"
+            data-testid="search-input"
+          />
+        )}
 
         {/* Filtros faceteados */}
         {facetedFilters.map((filter) => {

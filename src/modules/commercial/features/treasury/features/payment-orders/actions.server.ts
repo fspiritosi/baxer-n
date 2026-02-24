@@ -6,6 +6,9 @@ import { logger } from '@/shared/lib/logger';
 import { prisma } from '@/shared/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { Prisma } from '@/generated/prisma/client';
+import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
+import { parseSearchParams, stateToPrismaParams } from '@/shared/components/common/DataTable/helpers';
+import { CREDIT_NOTE_TYPES, isCreditNote } from '@/modules/commercial/shared/voucher-utils';
 import type { CreatePaymentOrderFormData } from '../../shared/validators';
 import type { PendingPurchaseInvoice, PaymentOrderListItem, PaymentOrderWithDetails } from '../../shared/types';
 import { createJournalEntryForPaymentOrder } from '@/modules/accounting/features/integrations/commercial';
@@ -25,6 +28,10 @@ export async function getPendingPurchaseInvoices(supplierId: string): Promise<Pe
         status: {
           in: ['CONFIRMED', 'PARTIAL_PAID'],
         },
+        // NC se compensa automáticamente, no se paga
+        voucherType: {
+          notIn: CREDIT_NOTE_TYPES,
+        },
       },
       select: {
         id: true,
@@ -37,13 +44,45 @@ export async function getPendingPurchaseInvoices(supplierId: string): Promise<Pe
             amount: true,
           },
         },
+        creditNoteApplicationsReceived: {
+          select: {
+            amount: true,
+            creditNoteId: true,
+          },
+        },
+        creditDebitNotes: {
+          select: {
+            id: true,
+            voucherType: true,
+            total: true,
+            status: true,
+          },
+        },
       },
       orderBy: { issueDate: 'asc' },
     });
 
     return invoices.map((invoice) => {
-      const paidAmount = invoice.paymentOrderItems.reduce((sum, item) => sum + Number(item.amount), 0);
+      const paymentsPaid = invoice.paymentOrderItems.reduce((sum, item) => sum + Number(item.amount), 0);
+      const cnAppliedExplicit = invoice.creditNoteApplicationsReceived.reduce((sum, app) => sum + Number(app.amount), 0);
+      // Fallback: NC vinculadas por originalInvoiceId sin registro explícito
+      const explicitCNIds = new Set(
+        invoice.creditNoteApplicationsReceived.map((app) => app.creditNoteId)
+      );
+      const cnLinkedRaw = invoice.creditDebitNotes
+        .filter(
+          (doc) =>
+            isCreditNote(doc.voucherType) &&
+            doc.status !== 'DRAFT' &&
+            doc.status !== 'CANCELLED' &&
+            !explicitCNIds.has(doc.id)
+        )
+        .reduce((sum, doc) => sum + Number(doc.total), 0);
+      const maxFallbackCN = Math.max(0, Number(invoice.total) - paymentsPaid - cnAppliedExplicit);
+      const cnLinked = Math.min(cnLinkedRaw, maxFallbackCN);
+      const cnApplied = cnAppliedExplicit + cnLinked;
       const total = Number(invoice.total);
+      const paidAmount = paymentsPaid + cnApplied;
       return {
         id: invoice.id,
         fullNumber: invoice.fullNumber,
@@ -90,7 +129,7 @@ export async function createPaymentOrder(data: CreatePaymentOrderFormData) {
       const newPaymentOrder = await tx.paymentOrder.create({
         data: {
           companyId,
-          supplierId: data.supplierId,
+          supplierId: data.supplierId || null,
           number: nextNumber,
           fullNumber,
           date: data.date,
@@ -101,11 +140,12 @@ export async function createPaymentOrder(data: CreatePaymentOrderFormData) {
         },
       });
 
-      // Crear items
+      // Crear items (facturas y/o gastos)
       await tx.paymentOrderItem.createMany({
         data: data.items.map((item) => ({
           paymentOrderId: newPaymentOrder.id,
-          invoiceId: item.invoiceId,
+          invoiceId: item.invoiceId || null,
+          expenseId: item.expenseId || null,
           amount: new Prisma.Decimal(item.amount),
         })),
       });
@@ -124,6 +164,19 @@ export async function createPaymentOrder(data: CreatePaymentOrderFormData) {
         })),
       });
 
+      // Crear retenciones
+      if (data.withholdings && data.withholdings.length > 0) {
+        await tx.paymentOrderWithholding.createMany({
+          data: data.withholdings.map((w) => ({
+            paymentOrderId: newPaymentOrder.id,
+            taxType: w.taxType,
+            rate: new Prisma.Decimal(w.rate),
+            amount: new Prisma.Decimal(w.amount),
+            certificateNumber: w.certificateNumber || null,
+          })),
+        });
+      }
+
       return newPaymentOrder;
     });
 
@@ -137,7 +190,7 @@ export async function createPaymentOrder(data: CreatePaymentOrderFormData) {
 
     revalidatePath('/dashboard/commercial/treasury/payment-orders');
 
-    return { success: true, data: paymentOrder };
+    return { success: true, id: paymentOrder.id };
   } catch (error) {
     logger.error('Error al crear orden de pago', { data: { error } });
     if (error instanceof Error) {
@@ -169,9 +222,11 @@ export async function confirmPaymentOrder(paymentOrderId: string) {
         items: {
           include: {
             invoice: true,
+            expense: true,
           },
         },
         payments: true,
+        withholdings: true,
       },
     });
 
@@ -191,26 +246,46 @@ export async function confirmPaymentOrder(paymentOrderId: string) {
         },
       });
 
-      // 2. Actualizar estado de facturas
+      // 2. Actualizar estado de facturas y gastos
       for (const item of paymentOrder.items) {
-        const invoice = item.invoice;
+        if (item.invoiceId && item.invoice) {
+          // Item de factura de compra
+          const invoice = item.invoice;
 
-        // Calcular total pagado (incluye pagos anteriores + esta orden)
-        const existingPayments = await tx.paymentOrderItem.aggregate({
-          where: { invoiceId: item.invoiceId },
-          _sum: { amount: true },
-        });
+          const existingPayments = await tx.paymentOrderItem.aggregate({
+            where: { invoiceId: item.invoiceId },
+            _sum: { amount: true },
+          });
 
-        const totalPaid = Number(existingPayments._sum.amount || 0);
-        const invoiceTotal = Number(invoice.total);
+          const cnApplications = await tx.purchaseCreditNoteApplication.aggregate({
+            where: { invoiceId: item.invoiceId },
+            _sum: { amount: true },
+          });
 
-        // Actualizar estado según si está totalmente pagada
-        const newStatus = totalPaid >= invoiceTotal ? 'PAID' : 'PARTIAL_PAID';
+          const totalPaid = Number(existingPayments._sum.amount || 0) + Number(cnApplications._sum.amount || 0);
+          const invoiceTotal = Number(invoice.total);
+          const newStatus = totalPaid >= invoiceTotal ? 'PAID' : 'PARTIAL_PAID';
 
-        await tx.purchaseInvoice.update({
-          where: { id: item.invoiceId },
-          data: { status: newStatus },
-        });
+          await tx.purchaseInvoice.update({
+            where: { id: item.invoiceId },
+            data: { status: newStatus },
+          });
+        } else if (item.expenseId && item.expense) {
+          // Item de gasto
+          const existingPayments = await tx.paymentOrderItem.aggregate({
+            where: { expenseId: item.expenseId },
+            _sum: { amount: true },
+          });
+
+          const totalPaid = Number(existingPayments._sum.amount || 0);
+          const expenseTotal = Number(item.expense.amount);
+          const newStatus = totalPaid >= expenseTotal ? 'PAID' : 'PARTIAL_PAID';
+
+          await tx.expense.update({
+            where: { id: item.expenseId },
+            data: { status: newStatus },
+          });
+        }
       }
 
       // 3. Crear movimientos de caja/banco según formas de pago
@@ -270,6 +345,10 @@ export async function confirmPaymentOrder(paymentOrderId: string) {
                 date: paymentOrder.date,
                 description: `Pago de ${paymentOrder.fullNumber}`,
                 reference: paymentOrder.fullNumber,
+                paymentOrderId,
+                reconciled: true,
+                reconciledAt: new Date(),
+                reconciledBy: userId,
                 createdBy: userId,
               },
             });
@@ -282,6 +361,26 @@ export async function confirmPaymentOrder(paymentOrderId: string) {
               },
             });
           }
+        }
+
+        // 3b. Si el pago es con cheque, crear registro Check como OWN en DELIVERED
+        if (payment.paymentMethod === 'CHECK' && payment.checkNumber) {
+          await tx.check.create({
+            data: {
+              companyId,
+              type: 'OWN',
+              status: 'DELIVERED',
+              checkNumber: payment.checkNumber,
+              bankName: payment.reference || 'Sin especificar',
+              amount: payment.amount,
+              issueDate: paymentOrder.date,
+              dueDate: paymentOrder.date,
+              drawerName: 'Empresa',
+              supplierId: paymentOrder.supplierId,
+              paymentOrderPaymentId: payment.id,
+              createdBy: userId,
+            },
+          });
         }
       }
 
@@ -384,6 +483,76 @@ export async function getPaymentOrders(params: { supplierId?: string; status?: s
 }
 
 /**
+ * Obtiene órdenes de pago con paginación server-side para DataTable
+ */
+export async function getPaymentOrdersPaginated(searchParams: DataTableSearchParams) {
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const parsed = parseSearchParams(searchParams);
+    const { page, pageSize, search, sortBy, sortOrder } = parsed;
+    const { skip, take, orderBy: prismaOrderBy } = stateToPrismaParams(parsed);
+
+    const where: Prisma.PaymentOrderWhereInput = {
+      companyId,
+      ...(search && {
+        OR: [
+          { fullNumber: { contains: search, mode: 'insensitive' } },
+          { supplier: { businessName: { contains: search, mode: 'insensitive' } } },
+          { supplier: { tradeName: { contains: search, mode: 'insensitive' } } },
+        ],
+      }),
+    };
+
+    const orderBy = prismaOrderBy && Object.keys(prismaOrderBy).length > 0 ? prismaOrderBy : { number: 'desc' as const };
+
+    const [data, total] = await Promise.all([
+      prisma.paymentOrder.findMany({
+        where,
+        select: {
+          id: true,
+          number: true,
+          fullNumber: true,
+          date: true,
+          totalAmount: true,
+          status: true,
+          createdAt: true,
+          supplier: {
+            select: {
+              id: true,
+              businessName: true,
+              tradeName: true,
+            },
+          },
+          _count: {
+            select: {
+              items: true,
+              payments: true,
+            },
+          },
+        },
+        orderBy,
+        skip,
+        take,
+      }),
+      prisma.paymentOrder.count({ where }),
+    ]);
+
+    return {
+      data: data.map((po) => ({
+        ...po,
+        totalAmount: Number(po.totalAmount),
+      })) as PaymentOrderListItem[],
+      total,
+    };
+  } catch (error) {
+    logger.error('Error al obtener órdenes de pago paginadas', { data: { error } });
+    throw error;
+  }
+}
+
+/**
  * Obtiene el detalle de una orden de pago
  */
 export async function getPaymentOrder(id: string): Promise<PaymentOrderWithDetails> {
@@ -395,13 +564,17 @@ export async function getPaymentOrder(id: string): Promise<PaymentOrderWithDetai
       where: { id, companyId },
       select: {
         id: true,
+        companyId: true,
         number: true,
         fullNumber: true,
         date: true,
         totalAmount: true,
         notes: true,
         status: true,
+        documentUrl: true,
+        documentKey: true,
         createdAt: true,
+        company: { select: { name: true } },
         supplier: {
           select: {
             id: true,
@@ -419,6 +592,14 @@ export async function getPaymentOrder(id: string): Promise<PaymentOrderWithDetai
                 id: true,
                 fullNumber: true,
                 total: true,
+              },
+            },
+            expense: {
+              select: {
+                id: true,
+                fullNumber: true,
+                description: true,
+                amount: true,
               },
             },
           },
@@ -445,6 +626,29 @@ export async function getPaymentOrder(id: string): Promise<PaymentOrderWithDetai
             reference: true,
           },
         },
+        withholdings: {
+          select: {
+            id: true,
+            taxType: true,
+            rate: true,
+            amount: true,
+            certificateNumber: true,
+          },
+        },
+        bankMovements: {
+          select: {
+            id: true,
+            type: true,
+            amount: true,
+            date: true,
+            bankAccount: {
+              select: {
+                bankName: true,
+                accountNumber: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -458,14 +662,27 @@ export async function getPaymentOrder(id: string): Promise<PaymentOrderWithDetai
       items: paymentOrder.items.map((item) => ({
         ...item,
         amount: Number(item.amount),
-        invoice: {
+        invoice: item.invoice ? {
           ...item.invoice,
           total: Number(item.invoice.total),
-        },
+        } : null,
+        expense: item.expense ? {
+          ...item.expense,
+          amount: Number(item.expense.amount),
+        } : null,
       })),
       payments: paymentOrder.payments.map((payment) => ({
         ...payment,
         amount: Number(payment.amount),
+      })),
+      withholdings: paymentOrder.withholdings.map((w) => ({
+        ...w,
+        rate: Number(w.rate),
+        amount: Number(w.amount),
+      })),
+      bankMovements: paymentOrder.bankMovements?.map((mov) => ({
+        ...mov,
+        amount: Number(mov.amount),
       })),
     } as PaymentOrderWithDetails;
   } catch (error) {

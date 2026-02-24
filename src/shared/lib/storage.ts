@@ -382,6 +382,7 @@ export {
   buildEmployeeDocumentPath,
   buildEquipmentDocumentPath,
   buildCompanyDocumentPath,
+  buildCommercialDocumentPath,
   buildDocumentFilename,
   sanitizeFilename,
 } from '../config/storage.config';

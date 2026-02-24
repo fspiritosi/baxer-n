@@ -96,7 +96,7 @@ export const instanceConfig: InstanceConfig = {
 
   // Puertos (cambiar si corres múltiples instancias)
   ports: {
-    app: 3001,
+    app: 3000,
     database: 5533,
     minioApi: 9002,
     minioConsole: 9003,

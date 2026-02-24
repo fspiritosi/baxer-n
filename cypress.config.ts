@@ -3,6 +3,15 @@ import { defineConfig } from 'cypress';
 import {
   cleanupTestDocumentTypes,
   cleanupAllTestData,
+  cleanupTestProducts,
+  cleanupTestSuppliers,
+  cleanupTestSalesInvoices,
+  cleanupTestPurchaseInvoices,
+  cleanupTestBankAccounts,
+  cleanupTestExpenses,
+  cleanupTestWarehouses,
+  cleanupTestPurchaseOrders,
+  cleanupTestReceivingNotes,
   getTestCompanyId,
   closePool,
 } from './cypress/support/db';
@@ -36,6 +45,69 @@ export default defineConfig({
           const companyId = await getTestCompanyId(OWNER_USER_ID);
           return companyId;
         },
+
+        async cleanupTestProducts() {
+          const companyId = await getTestCompanyId(OWNER_USER_ID);
+          if (!companyId) return { deleted: 0, error: 'No company found' };
+          const deleted = await cleanupTestProducts(companyId);
+          return { deleted };
+        },
+
+        async cleanupTestSuppliers() {
+          const companyId = await getTestCompanyId(OWNER_USER_ID);
+          if (!companyId) return { deleted: 0, error: 'No company found' };
+          const deleted = await cleanupTestSuppliers(companyId);
+          return { deleted };
+        },
+
+        async cleanupTestSalesInvoices() {
+          const companyId = await getTestCompanyId(OWNER_USER_ID);
+          if (!companyId) return { deleted: 0, error: 'No company found' };
+          const deleted = await cleanupTestSalesInvoices(companyId);
+          return { deleted };
+        },
+
+        async cleanupTestPurchaseInvoices() {
+          const companyId = await getTestCompanyId(OWNER_USER_ID);
+          if (!companyId) return { deleted: 0, error: 'No company found' };
+          const deleted = await cleanupTestPurchaseInvoices(companyId);
+          return { deleted };
+        },
+
+        async cleanupTestBankAccounts() {
+          const companyId = await getTestCompanyId(OWNER_USER_ID);
+          if (!companyId) return { deleted: 0, error: 'No company found' };
+          const deleted = await cleanupTestBankAccounts(companyId);
+          return { deleted };
+        },
+
+        async cleanupTestExpenses() {
+          const companyId = await getTestCompanyId(OWNER_USER_ID);
+          if (!companyId) return { deleted: 0, error: 'No company found' };
+          const deleted = await cleanupTestExpenses(companyId);
+          return { deleted };
+        },
+
+        async cleanupTestWarehouses() {
+          const companyId = await getTestCompanyId(OWNER_USER_ID);
+          if (!companyId) return { deleted: 0, error: 'No company found' };
+          const deleted = await cleanupTestWarehouses(companyId);
+          return { deleted };
+        },
+
+        async cleanupTestPurchaseOrders() {
+          const companyId = await getTestCompanyId(OWNER_USER_ID);
+          if (!companyId) return { deleted: 0, error: 'No company found' };
+          const deleted = await cleanupTestPurchaseOrders(companyId);
+          return { deleted };
+        },
+
+        async cleanupTestReceivingNotes() {
+          const companyId = await getTestCompanyId(OWNER_USER_ID);
+          if (!companyId) return { deleted: 0, error: 'No company found' };
+          const deleted = await cleanupTestReceivingNotes(companyId);
+          return { deleted };
+        },
       });
 
       // Close pool on exit
@@ -62,7 +134,7 @@ export default defineConfig({
   },
   env: {
     // These will be overridden by cypress.env.json or CLI
-    test_user: 'yordanpz+clerk_test@hotmail.com',
-    test_password: 'Caminandoando23.',
+    test_user: 'fspiritosi+clerk_test@codecontrol.com.ar',
+    test_password: '@Dembe1412',
   },
 });

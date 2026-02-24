@@ -73,6 +73,7 @@ export function DataTable<TData extends Record<string, unknown>, TValue = unknow
   searchParams = {},
   facetedFilters = [],
   searchPlaceholder = 'Buscar...',
+  showSearch = true,
   searchColumn,
   showColumnToggle = true,
   showRowSelection = false,
@@ -157,6 +158,7 @@ export function DataTable<TData extends Record<string, unknown>, TValue = unknow
       <DataTableToolbar
         table={table}
         searchPlaceholder={searchPlaceholder}
+        showSearch={showSearch}
         searchColumn={searchColumn}
         facetedFilters={facetedFilters}
         showColumnToggle={showColumnToggle}

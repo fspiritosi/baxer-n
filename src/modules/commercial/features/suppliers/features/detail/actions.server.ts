@@ -5,6 +5,7 @@ import { prisma } from '@/shared/lib/prisma';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { logger } from '@/shared/lib/logger';
 import type { Prisma } from '@prisma/client';
+import { isCreditNote } from '@/modules/commercial/shared/voucher-utils';
 
 /**
  * Obtiene el detalle completo del proveedor con su cuenta corriente
@@ -32,7 +33,7 @@ export async function getSupplierAccountStatement(supplierId: string) {
       where: {
         supplierId,
         companyId,
-        status: 'CONFIRMED', // Solo facturas confirmadas
+        status: { in: ['CONFIRMED', 'PAID', 'PARTIAL_PAID'] },
       },
       select: {
         id: true,
@@ -56,6 +57,35 @@ export async function getSupplierAccountStatement(supplierId: string) {
                 date: true,
               },
             },
+          },
+        },
+        creditNoteApplicationsReceived: {
+          select: {
+            amount: true,
+            creditNoteId: true,
+            creditNote: {
+              select: {
+                fullNumber: true,
+              },
+            },
+          },
+        },
+        creditNoteApplicationsGiven: {
+          select: {
+            amount: true,
+            invoice: {
+              select: {
+                fullNumber: true,
+              },
+            },
+          },
+        },
+        creditDebitNotes: {
+          select: {
+            id: true,
+            voucherType: true,
+            total: true,
+            status: true,
           },
         },
       },
@@ -86,17 +116,63 @@ export async function getSupplierAccountStatement(supplierId: string) {
             },
           },
         },
+        withholdings: {
+          select: {
+            amount: true,
+            taxType: true,
+          },
+        },
       },
       orderBy: { date: 'desc' },
     });
 
     // Calcular saldos
     const invoicesWithBalance = purchaseInvoices.map((invoice) => {
-      const totalPaid = invoice.paymentOrderItems.reduce(
-        (sum, item) => sum + Number(item.amount),
+      const isNC = isCreditNote(invoice.voucherType);
+
+      const totalPayments = invoice.paymentOrderItems.reduce(
+        (sum: number, item: { amount: unknown }) => sum + Number(item.amount),
         0
       );
-      const balance = Number(invoice.total) - totalPaid;
+
+      // NC aplicadas explícitamente (tabla PurchaseCreditNoteApplication)
+      const cnAppliedToThisExplicit = invoice.creditNoteApplicationsReceived.reduce(
+        (sum, app) => sum + Number(app.amount),
+        0
+      );
+
+      // Fallback: NC vinculadas por originalInvoiceId sin registro explícito
+      // Capear para que pagado no supere el total de la factura
+      const explicitCNIds = new Set(
+        invoice.creditNoteApplicationsReceived.map((app) => app.creditNoteId)
+      );
+      const cnLinkedRaw = !isNC
+        ? invoice.creditDebitNotes
+            .filter(
+              (doc) =>
+                isCreditNote(doc.voucherType) &&
+                doc.status !== 'DRAFT' &&
+                doc.status !== 'CANCELLED' &&
+                !explicitCNIds.has(doc.id)
+            )
+            .reduce((sum, doc) => sum + Number(doc.total), 0)
+        : 0;
+      const maxFallbackNC = Math.max(0, Number(invoice.total) - totalPayments - cnAppliedToThisExplicit);
+      const cnLinkedToThis = Math.min(cnLinkedRaw, maxFallbackNC);
+
+      const cnAppliedToThis = cnAppliedToThisExplicit + cnLinkedToThis;
+
+      const cnAppliedFromThis = invoice.creditNoteApplicationsGiven.reduce(
+        (sum, app) => sum + Number(app.amount),
+        0
+      );
+
+      // NC: saldo restante no aplicado (negativo = crédito disponible)
+      // Factura/ND: total - pagado - NC aplicadas
+      const totalPaid = isNC ? cnAppliedFromThis : totalPayments + cnAppliedToThis;
+      const balance = isNC
+        ? -(Number(invoice.total) - cnAppliedFromThis)
+        : Number(invoice.total) - totalPayments - cnAppliedToThis;
 
       return {
         id: invoice.id,
@@ -122,6 +198,7 @@ export async function getSupplierAccountStatement(supplierId: string) {
       date: payment.date,
       totalAmount: Number(payment.totalAmount),
       status: payment.status,
+      withholdingsTotal: payment.withholdings.reduce((sum, w) => sum + Number(w.amount), 0),
       invoices: payment.items.map((item) => ({
         amount: Number(item.amount),
         invoiceNumber: item.invoice.fullNumber,
@@ -129,9 +206,13 @@ export async function getSupplierAccountStatement(supplierId: string) {
       })),
     }));
 
-    // Calcular totales
-    const totalInvoiced = invoicesWithBalance.reduce((sum, inv) => sum + inv.total, 0);
-    const totalPaid = invoicesWithBalance.reduce((sum, inv) => sum + inv.paid, 0);
+    // Calcular totales: Facturado (Facturas + ND), Pagado (Pagos + NC aplicadas), Saldo
+    const totalInvoiced = invoicesWithBalance
+      .filter((inv) => !isCreditNote(inv.voucherType))
+      .reduce((sum, inv) => sum + inv.total, 0);
+    const totalPaid = invoicesWithBalance
+      .filter((inv) => !isCreditNote(inv.voucherType))
+      .reduce((sum, inv) => sum + inv.paid, 0);
     const totalBalance = totalInvoiced - totalPaid;
 
     logger.info('Cuenta corriente de proveedor obtenida', {

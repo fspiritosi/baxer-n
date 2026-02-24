@@ -8,13 +8,14 @@ import { Document, Page, Text, View } from '@react-pdf/renderer';
 import { styles } from './styles';
 import type { InvoicePDFData } from './types';
 import moment from 'moment';
+import { LinkedDocumentsSection } from '@/modules/commercial/shared/pdf/LinkedDocumentsSection';
 
 interface InvoiceTemplateProps {
   data: InvoicePDFData;
 }
 
 export function InvoiceTemplate({ data }: InvoiceTemplateProps) {
-  const { company, invoice, customer, lines, totals, notes } = data;
+  const { company, invoice, customer, lines, totals, notes, linkedDocuments } = data;
   const isTypeA = invoice.type === 'A';
 
   return (
@@ -193,6 +194,11 @@ export function InvoiceTemplate({ data }: InvoiceTemplateProps) {
               </Text>
             </View>
           </View>
+        )}
+
+        {/* DOCUMENTOS VINCULADOS (opcional) */}
+        {linkedDocuments && linkedDocuments.sections.length > 0 && (
+          <LinkedDocumentsSection data={linkedDocuments} />
         )}
 
         {/* FOOTER */}

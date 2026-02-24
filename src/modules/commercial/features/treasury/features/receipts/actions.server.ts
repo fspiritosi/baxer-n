@@ -6,6 +6,13 @@ import { logger } from '@/shared/lib/logger';
 import { prisma } from '@/shared/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { Prisma } from '@/generated/prisma/client';
+import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
+import {
+  buildSearchWhere,
+  parseSearchParams,
+  stateToPrismaParams,
+} from '@/shared/components/common/DataTable/helpers';
+import { CREDIT_NOTE_TYPES, isCreditNote } from '@/modules/commercial/shared/voucher-utils';
 import type { CreateReceiptFormData } from '../../shared/validators';
 import type { PendingInvoice, ReceiptListItem, ReceiptWithDetails } from '../../shared/types';
 import { createJournalEntryForReceipt } from '@/modules/accounting/features/integrations/commercial';
@@ -25,6 +32,10 @@ export async function getPendingInvoices(customerId: string): Promise<PendingInv
         status: {
           in: ['CONFIRMED', 'PARTIAL_PAID'],
         },
+        // NC se compensa automáticamente, no se cobra
+        voucherType: {
+          notIn: CREDIT_NOTE_TYPES,
+        },
       },
       select: {
         id: true,
@@ -37,13 +48,45 @@ export async function getPendingInvoices(customerId: string): Promise<PendingInv
             amount: true,
           },
         },
+        creditNoteApplicationsReceived: {
+          select: {
+            amount: true,
+            creditNoteId: true,
+          },
+        },
+        creditDebitNotes: {
+          select: {
+            id: true,
+            voucherType: true,
+            total: true,
+            status: true,
+          },
+        },
       },
       orderBy: { issueDate: 'asc' },
     });
 
     return invoices.map((invoice) => {
-      const paidAmount = invoice.receiptItems.reduce((sum, item) => sum + Number(item.amount), 0);
+      const receiptsPaid = invoice.receiptItems.reduce((sum, item) => sum + Number(item.amount), 0);
+      const cnAppliedExplicit = invoice.creditNoteApplicationsReceived.reduce((sum, app) => sum + Number(app.amount), 0);
+      // Fallback: NC vinculadas por originalInvoiceId sin registro explícito
+      const explicitCNIds = new Set(
+        invoice.creditNoteApplicationsReceived.map((app) => app.creditNoteId)
+      );
+      const cnLinkedRaw = invoice.creditDebitNotes
+        .filter(
+          (doc) =>
+            isCreditNote(doc.voucherType) &&
+            doc.status !== 'DRAFT' &&
+            doc.status !== 'CANCELLED' &&
+            !explicitCNIds.has(doc.id)
+        )
+        .reduce((sum, doc) => sum + Number(doc.total), 0);
+      const maxFallbackCN = Math.max(0, Number(invoice.total) - receiptsPaid - cnAppliedExplicit);
+      const cnLinked = Math.min(cnLinkedRaw, maxFallbackCN);
+      const cnApplied = cnAppliedExplicit + cnLinked;
       const total = Number(invoice.total);
+      const paidAmount = receiptsPaid + cnApplied;
       return {
         id: invoice.id,
         fullNumber: invoice.fullNumber,
@@ -124,6 +167,19 @@ export async function createReceipt(data: CreateReceiptFormData) {
         })),
       });
 
+      // Crear retenciones
+      if (data.withholdings && data.withholdings.length > 0) {
+        await tx.receiptWithholding.createMany({
+          data: data.withholdings.map((w) => ({
+            receiptId: newReceipt.id,
+            taxType: w.taxType,
+            rate: new Prisma.Decimal(w.rate),
+            amount: new Prisma.Decimal(w.amount),
+            certificateNumber: w.certificateNumber || null,
+          })),
+        });
+      }
+
       return newReceipt;
     });
 
@@ -137,7 +193,7 @@ export async function createReceipt(data: CreateReceiptFormData) {
 
     revalidatePath('/dashboard/commercial/treasury/receipts');
 
-    return { success: true, data: receipt };
+    return { success: true, id: receipt.id };
   } catch (error) {
     logger.error('Error al crear recibo', { data: { error } });
     if (error instanceof Error) {
@@ -172,6 +228,7 @@ export async function confirmReceipt(receiptId: string) {
           },
         },
         payments: true,
+        withholdings: true,
       },
     });
 
@@ -195,13 +252,18 @@ export async function confirmReceipt(receiptId: string) {
       for (const item of receipt.items) {
         const invoice = item.invoice;
 
-        // Calcular total pagado (incluye pagos anteriores + este recibo)
+        // Calcular total pagado (recibos + NC aplicadas)
         const existingPayments = await tx.receiptItem.aggregate({
           where: { invoiceId: item.invoiceId },
           _sum: { amount: true },
         });
 
-        const totalPaid = Number(existingPayments._sum.amount || 0);
+        const cnApplications = await tx.salesCreditNoteApplication.aggregate({
+          where: { invoiceId: item.invoiceId },
+          _sum: { amount: true },
+        });
+
+        const totalPaid = Number(existingPayments._sum.amount || 0) + Number(cnApplications._sum.amount || 0);
         const invoiceTotal = Number(invoice.total);
 
         // Actualizar estado según si está totalmente pagada
@@ -270,6 +332,10 @@ export async function confirmReceipt(receiptId: string) {
                 date: receipt.date,
                 description: `Cobro de ${receipt.fullNumber}`,
                 reference: receipt.fullNumber,
+                receiptId,
+                reconciled: true,
+                reconciledAt: new Date(),
+                reconciledBy: userId,
                 createdBy: userId,
               },
             });
@@ -282,6 +348,26 @@ export async function confirmReceipt(receiptId: string) {
               },
             });
           }
+        }
+
+        // 3b. Si el pago es con cheque, crear registro Check como THIRD_PARTY en PORTFOLIO
+        if (payment.paymentMethod === 'CHECK' && payment.checkNumber) {
+          await tx.check.create({
+            data: {
+              companyId,
+              type: 'THIRD_PARTY',
+              status: 'PORTFOLIO',
+              checkNumber: payment.checkNumber,
+              bankName: payment.reference || 'Sin especificar',
+              amount: payment.amount,
+              issueDate: receipt.date,
+              dueDate: receipt.date,
+              drawerName: 'Cliente',
+              customerId: receipt.customerId,
+              receiptPaymentId: payment.id,
+              createdBy: userId,
+            },
+          });
         }
       }
 
@@ -377,6 +463,73 @@ export async function getReceipts(params: { customerId?: string; status?: string
 }
 
 /**
+ * Obtiene recibos con paginación server-side para DataTable
+ */
+export async function getReceiptsPaginated(searchParams: DataTableSearchParams) {
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const state = parseSearchParams(searchParams);
+    const { skip, take, orderBy } = stateToPrismaParams(state);
+
+    // Buscar en fullNumber y nombre de cliente
+    const where = {
+      companyId,
+      ...(state.search
+        ? {
+            OR: [
+              { fullNumber: { contains: state.search, mode: 'insensitive' as const } },
+              { customer: { name: { contains: state.search, mode: 'insensitive' as const } } },
+            ],
+          }
+        : {}),
+    };
+
+    const [receipts, total] = await Promise.all([
+      prisma.receipt.findMany({
+        where,
+        skip,
+        take,
+        orderBy: orderBy || { number: 'desc' },
+        select: {
+          id: true,
+          number: true,
+          fullNumber: true,
+          date: true,
+          totalAmount: true,
+          status: true,
+          createdAt: true,
+          customer: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          _count: {
+            select: {
+              items: true,
+              payments: true,
+            },
+          },
+        },
+      }),
+      prisma.receipt.count({ where }),
+    ]);
+
+    const data = receipts.map((r) => ({
+      ...r,
+      totalAmount: Number(r.totalAmount),
+    })) as ReceiptListItem[];
+
+    return { data, total };
+  } catch (error) {
+    logger.error('Error al obtener recibos paginados', { data: { error } });
+    throw new Error('Error al obtener recibos');
+  }
+}
+
+/**
  * Obtiene el detalle de un recibo
  */
 export async function getReceipt(id: string): Promise<ReceiptWithDetails> {
@@ -388,13 +541,17 @@ export async function getReceipt(id: string): Promise<ReceiptWithDetails> {
       where: { id, companyId },
       select: {
         id: true,
+        companyId: true,
         number: true,
         fullNumber: true,
         date: true,
         totalAmount: true,
         notes: true,
         status: true,
+        documentUrl: true,
+        documentKey: true,
         createdAt: true,
+        company: { select: { name: true } },
         customer: {
           select: {
             id: true,
@@ -437,6 +594,29 @@ export async function getReceipt(id: string): Promise<ReceiptWithDetails> {
             reference: true,
           },
         },
+        withholdings: {
+          select: {
+            id: true,
+            taxType: true,
+            rate: true,
+            amount: true,
+            certificateNumber: true,
+          },
+        },
+        bankMovements: {
+          select: {
+            id: true,
+            type: true,
+            amount: true,
+            date: true,
+            bankAccount: {
+              select: {
+                bankName: true,
+                accountNumber: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -458,6 +638,15 @@ export async function getReceipt(id: string): Promise<ReceiptWithDetails> {
       payments: receipt.payments.map((payment) => ({
         ...payment,
         amount: Number(payment.amount),
+      })),
+      withholdings: receipt.withholdings.map((w) => ({
+        ...w,
+        rate: Number(w.rate),
+        amount: Number(w.amount),
+      })),
+      bankMovements: receipt.bankMovements?.map((mov) => ({
+        ...mov,
+        amount: Number(mov.amount),
       })),
     } as ReceiptWithDetails;
   } catch (error) {

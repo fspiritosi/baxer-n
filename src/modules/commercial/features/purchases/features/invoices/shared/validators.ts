@@ -36,6 +36,7 @@ export const purchaseInvoiceLineSchema = z.object({
   quantity: z.string().regex(/^\d+(\.\d{1,3})?$/, 'Cantidad inválida'),
   unitCost: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Costo unitario inválido'),
   vatRate: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Alícuota de IVA inválida'),
+  purchaseOrderLineId: z.string().uuid().optional().or(z.literal('')),
 });
 
 // Schema para crear/editar factura de compra
@@ -44,6 +45,8 @@ export const purchaseInvoiceFormSchema = z.object({
   voucherType: z.string().min(1, 'Selecciona un tipo de comprobante'),
   pointOfSale: z.string().regex(/^\d{4}$/, 'Punto de venta debe ser 4 dígitos (ej: 0001)'),
   number: z.string().regex(/^\d{8}$/, 'Número debe ser 8 dígitos (ej: 00000123)'),
+  originalInvoiceId: z.string().uuid().optional().or(z.literal('')),
+  purchaseOrderId: z.string().uuid().optional().or(z.literal('')),
   issueDate: z.date({ message: 'La fecha de emisión es requerida' }),
   dueDate: z.date().optional(),
   cae: z.string().optional(),

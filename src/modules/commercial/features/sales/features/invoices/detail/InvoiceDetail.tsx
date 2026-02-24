@@ -2,11 +2,15 @@ import { getInvoiceById } from '../list/actions.server';
 import { Card } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
-import { ArrowLeft, Download } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import moment from 'moment';
 import { VOUCHER_TYPE_LABELS, INVOICE_STATUS_LABELS } from '../shared/validators';
 import { Separator } from '@/shared/components/ui/separator';
+import { _DocumentAttachment } from '@/modules/commercial/shared/components/_DocumentAttachment';
+import { _InvoiceLinkedDocuments } from './components/_InvoiceLinkedDocuments';
+import { _LinkInvoiceToProjection } from './components/_LinkInvoiceToProjection';
+import { _InvoicePDFButton } from './components/_InvoicePDFButton';
 
 type Invoice = Awaited<ReturnType<typeof getInvoiceById>>;
 
@@ -56,18 +60,20 @@ export async function InvoiceDetail({ id }: InvoiceDetailProps) {
         </div>
 
         <div className="flex gap-2">
-          <Button variant="outline" asChild>
-            <a href={`/api/invoices/${invoice.id}/pdf`} target="_blank" rel="noopener noreferrer">
-              <Download className="mr-2 h-4 w-4" />
-              Descargar PDF
-            </a>
-          </Button>
+          <_InvoicePDFButton invoice={invoice} />
           {invoice.status === 'DRAFT' && (
             <Button variant="outline" asChild>
               <Link href={`/dashboard/commercial/invoices/${invoice.id}/edit`}>
                 Editar
               </Link>
             </Button>
+          )}
+          {(invoice.status === 'CONFIRMED' || invoice.status === 'PARTIAL_PAID') && (
+            <_LinkInvoiceToProjection
+              invoiceId={invoice.id}
+              fullNumber={invoice.fullNumber}
+              total={Number(invoice.total)}
+            />
           )}
         </div>
       </div>
@@ -261,6 +267,9 @@ export async function InvoiceDetail({ id }: InvoiceDetailProps) {
         </div>
       )}
 
+      {/* Documentos Vinculados y Saldo */}
+      <_InvoiceLinkedDocuments invoice={invoice} />
+
       {/* Asiento Contable */}
       {invoice.journalEntry && (
         <Card className="p-6">
@@ -282,6 +291,17 @@ export async function InvoiceDetail({ id }: InvoiceDetailProps) {
           </div>
         </Card>
       )}
+
+      {/* Documento Adjunto */}
+      <_DocumentAttachment
+        documentType="sales-invoice"
+        documentId={invoice.id}
+        companyId={invoice.companyId}
+        companyName={invoice.company.name}
+        documentNumber={invoice.fullNumber}
+        hasDocument={!!invoice.documentUrl}
+        documentUrl={invoice.documentUrl}
+      />
     </div>
   );
 }

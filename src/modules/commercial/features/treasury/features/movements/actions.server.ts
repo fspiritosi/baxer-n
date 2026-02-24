@@ -99,7 +99,7 @@ export async function createCashMovement(data: CashMovementFormData) {
 
     revalidatePath('/dashboard/commercial/treasury/cash-registers');
 
-    return { success: true, data: movement };
+    return { success: true, id: movement.id };
   } catch (error) {
     logger.error('Error al crear movimiento de caja', { data: { error } });
     if (error instanceof Error) {

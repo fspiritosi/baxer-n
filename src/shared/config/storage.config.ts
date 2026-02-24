@@ -338,3 +338,23 @@ export function buildDocumentFilename(documentTypeName: string, originalFilename
 
   return `${date}-${typeSlug}-${random}.${ext}`;
 }
+
+/**
+ * Genera path para documento adjunto comercial
+ * Formato: {company}/comercial/{tipo}/{numero}/{filename}
+ * Ejemplo: acme-sa/comercial/facturas-compra/0001-00000123/factura-2026-abc.pdf
+ */
+export function buildCommercialDocumentPath(params: {
+  companyName: string;
+  documentType: 'facturas-venta' | 'facturas-compra' | 'recibos' | 'ordenes-pago';
+  documentNumber: string;
+  filename: string;
+}): string {
+  const { companyName, documentType, documentNumber, filename } = params;
+
+  const companySlug = slugify(companyName);
+  const numberSlug = slugify(documentNumber);
+  const safeFilename = sanitizeFilename(filename);
+
+  return `${companySlug}/comercial/${documentType}/${numberSlug}/${safeFilename}`;
+}

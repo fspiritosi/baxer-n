@@ -232,6 +232,45 @@ export const BANK_MOVEMENT_TYPE_COLORS = {
 } as const;
 
 // ====================================
+// WITHHOLDING SCHEMAS
+// ====================================
+
+// Schema para retención impositiva
+export const withholdingSchema = z.object({
+  taxType: z.enum(['IVA', 'GANANCIAS', 'IIBB', 'SUSS'], {
+    message: 'Debe seleccionar un tipo de retención',
+  }),
+  rate: z
+    .string()
+    .min(1, 'La alícuota es requerida')
+    .regex(/^\d+(\.\d{1,2})?$/, 'Alícuota inválida (máximo 2 decimales)')
+    .refine((val) => parseFloat(val) >= 0 && parseFloat(val) <= 100, 'La alícuota debe estar entre 0 y 100'),
+  amount: z
+    .string()
+    .min(1, 'El monto es requerido')
+    .regex(/^\d+(\.\d{1,2})?$/, 'Monto inválido (máximo 2 decimales)')
+    .refine((val) => parseFloat(val) > 0, 'El monto debe ser mayor a 0'),
+  certificateNumber: z.string().max(50, 'El número de certificado no puede exceder 50 caracteres').optional().nullable(),
+});
+
+// ====================================
+// TYPE INFERENCE - WITHHOLDINGS
+// ====================================
+
+export type WithholdingFormData = z.infer<typeof withholdingSchema>;
+
+// ====================================
+// LABELS Y MAPPERS - WITHHOLDINGS
+// ====================================
+
+export const WITHHOLDING_TAX_TYPE_LABELS = {
+  IVA: 'Ret. IVA',
+  GANANCIAS: 'Ret. Ganancias',
+  IIBB: 'Ret. IIBB',
+  SUSS: 'Ret. SUSS',
+} as const;
+
+// ====================================
 // RECEIPT SCHEMAS
 // ====================================
 
@@ -274,17 +313,21 @@ export const createReceiptSchema = z
     date: z.date({ message: 'La fecha es requerida' }),
     notes: z.string().max(500, 'Las notas no pueden exceder 500 caracteres').optional().nullable(),
     items: z.array(receiptItemSchema).min(1, 'Debe agregar al menos una factura a cobrar'),
-    payments: z.array(receiptPaymentSchema).min(1, 'Debe agregar al menos una forma de pago'),
+    payments: z.array(receiptPaymentSchema),
+    withholdings: z.array(withholdingSchema).default([]),
   })
   .refine(
     (data) => {
-      // Validar que el total de items sea igual al total de pagos
+      // Sin pagos ni retenciones es válido (se vincula después a movimiento bancario)
+      if (data.payments.length === 0 && data.withholdings.length === 0) return true;
+      // Con pagos/retenciones, validar que el total sea igual al de facturas
       const totalItems = data.items.reduce((sum, item) => sum + parseFloat(item.amount), 0);
       const totalPayments = data.payments.reduce((sum, payment) => sum + parseFloat(payment.amount), 0);
-      return Math.abs(totalItems - totalPayments) < 0.01; // Tolerancia de 1 centavo
+      const totalWithholdings = data.withholdings.reduce((sum, w) => sum + parseFloat(w.amount), 0);
+      return Math.abs(totalItems - totalPayments - totalWithholdings) < 0.01;
     },
     {
-      message: 'El total de facturas debe ser igual al total de pagos',
+      message: 'El total de facturas debe ser igual al total de pagos + retenciones',
       path: ['payments'],
     }
   );
@@ -326,15 +369,19 @@ export const RECEIPT_STATUS_BADGES = {
 // PAYMENT ORDER SCHEMAS
 // ====================================
 
-// Schema para item de orden de pago (factura a pagar)
+// Schema para item de orden de pago (factura o gasto a pagar)
 export const paymentOrderItemSchema = z.object({
-  invoiceId: z.string().uuid('Factura inválida'),
+  invoiceId: z.string().uuid('Factura inválida').optional().nullable(),
+  expenseId: z.string().uuid('Gasto inválido').optional().nullable(),
   amount: z
     .string()
     .min(1, 'El monto es requerido')
     .regex(/^\d+(\.\d{1,2})?$/, 'Monto inválido (máximo 2 decimales)')
     .refine((val) => parseFloat(val) > 0, 'El monto debe ser mayor a 0'),
-});
+}).refine(
+  (data) => (data.invoiceId && !data.expenseId) || (!data.invoiceId && data.expenseId),
+  { message: 'Cada item debe tener una factura o un gasto, no ambos', path: ['invoiceId'] }
+);
 
 // Schema para pago de orden (forma de pago) - reutilizamos receiptPaymentSchema ya que es idéntico
 export const paymentOrderPaymentSchema = receiptPaymentSchema;
@@ -342,21 +389,25 @@ export const paymentOrderPaymentSchema = receiptPaymentSchema;
 // Schema para crear orden de pago
 export const createPaymentOrderSchema = z
   .object({
-    supplierId: z.string().uuid('Proveedor inválido'),
+    supplierId: z.string().uuid('Proveedor inválido').optional().nullable(),
     date: z.date({ message: 'La fecha es requerida' }),
     notes: z.string().max(500, 'Las notas no pueden exceder 500 caracteres').optional().nullable(),
-    items: z.array(paymentOrderItemSchema).min(1, 'Debe agregar al menos una factura a pagar'),
-    payments: z.array(paymentOrderPaymentSchema).min(1, 'Debe agregar al menos una forma de pago'),
+    items: z.array(paymentOrderItemSchema).min(1, 'Debe agregar al menos un item a pagar'),
+    payments: z.array(paymentOrderPaymentSchema),
+    withholdings: z.array(withholdingSchema).default([]),
   })
   .refine(
     (data) => {
-      // Validar que el total de items sea igual al total de pagos
+      // Sin pagos ni retenciones es válido (se vincula después a movimiento bancario)
+      if (data.payments.length === 0 && data.withholdings.length === 0) return true;
+      // Con pagos/retenciones, validar que el total sea igual al de facturas
       const totalItems = data.items.reduce((sum, item) => sum + parseFloat(item.amount), 0);
       const totalPayments = data.payments.reduce((sum, payment) => sum + parseFloat(payment.amount), 0);
-      return Math.abs(totalItems - totalPayments) < 0.01; // Tolerancia de 1 centavo
+      const totalWithholdings = data.withholdings.reduce((sum, w) => sum + parseFloat(w.amount), 0);
+      return Math.abs(totalItems - totalPayments - totalWithholdings) < 0.01;
     },
     {
-      message: 'El total de facturas debe ser igual al total de pagos',
+      message: 'El total de facturas debe ser igual al total de pagos + retenciones',
       path: ['payments'],
     }
   );
@@ -384,3 +435,189 @@ export const PAYMENT_ORDER_STATUS_BADGES = {
   CONFIRMED: 'default' as const,
   CANCELLED: 'destructive' as const,
 };
+
+// ====================================
+// CHECK SCHEMAS
+// ====================================
+
+export const createCheckSchema = z.object({
+  type: z.enum(['OWN', 'THIRD_PARTY'], { message: 'Debe seleccionar un tipo de cheque' }),
+  checkNumber: z
+    .string()
+    .min(1, 'El número de cheque es requerido')
+    .max(30, 'El número no puede exceder 30 caracteres'),
+  bankName: z
+    .string()
+    .min(1, 'El banco es requerido')
+    .max(100, 'El banco no puede exceder 100 caracteres'),
+  branch: z.string().max(100, 'La sucursal no puede exceder 100 caracteres').optional().nullable(),
+  accountNumber: z.string().max(50, 'La cuenta no puede exceder 50 caracteres').optional().nullable(),
+  amount: z
+    .string()
+    .min(1, 'El monto es requerido')
+    .regex(/^\d+(\.\d{1,2})?$/, 'Monto inválido (máximo 2 decimales)')
+    .refine((val) => parseFloat(val) > 0, 'El monto debe ser mayor a 0'),
+  issueDate: z.date({ message: 'La fecha de emisión es requerida' }),
+  dueDate: z.date({ message: 'La fecha de vencimiento es requerida' }),
+  drawerName: z
+    .string()
+    .min(1, 'El librador es requerido')
+    .max(200, 'El librador no puede exceder 200 caracteres'),
+  drawerTaxId: z.string().max(13, 'El CUIT no puede exceder 13 caracteres').optional().nullable(),
+  payeeName: z.string().max(200, 'El beneficiario no puede exceder 200 caracteres').optional().nullable(),
+  customerId: z.string().uuid('Cliente inválido').optional().nullable(),
+  supplierId: z.string().uuid('Proveedor inválido').optional().nullable(),
+  notes: z.string().max(500, 'Las notas no pueden exceder 500 caracteres').optional().nullable(),
+});
+
+export const depositCheckSchema = z.object({
+  checkId: z.string().uuid('Cheque inválido'),
+  bankAccountId: z.string().uuid('Cuenta bancaria requerida'),
+  depositDate: z.date({ message: 'La fecha de depósito es requerida' }),
+});
+
+export const endorseCheckSchema = z.object({
+  checkId: z.string().uuid('Cheque inválido'),
+  endorsedToName: z
+    .string()
+    .min(1, 'El nombre del beneficiario es requerido')
+    .max(200, 'No puede exceder 200 caracteres'),
+  endorsedToTaxId: z.string().max(13, 'El CUIT no puede exceder 13 caracteres').optional().nullable(),
+  supplierId: z.string().uuid('Proveedor inválido').optional().nullable(),
+  endorsedDate: z.date({ message: 'La fecha de endoso es requerida' }),
+});
+
+// ====================================
+// TYPE INFERENCE - CHECKS
+// ====================================
+
+export type CreateCheckFormData = z.infer<typeof createCheckSchema>;
+export type DepositCheckFormData = z.infer<typeof depositCheckSchema>;
+export type EndorseCheckFormData = z.infer<typeof endorseCheckSchema>;
+
+// ====================================
+// LABELS Y MAPPERS - CHECKS
+// ====================================
+
+export const CHECK_TYPE_LABELS = {
+  OWN: 'Propio',
+  THIRD_PARTY: 'Tercero',
+} as const;
+
+export const CHECK_STATUS_LABELS = {
+  PORTFOLIO: 'En Cartera',
+  DEPOSITED: 'Depositado',
+  CLEARED: 'Acreditado',
+  REJECTED: 'Rechazado',
+  ENDORSED: 'Endosado',
+  DELIVERED: 'Entregado',
+  CASHED: 'Cobrado',
+  VOIDED: 'Anulado',
+} as const;
+
+export const CHECK_STATUS_BADGES = {
+  PORTFOLIO: 'default' as const,
+  DEPOSITED: 'secondary' as const,
+  CLEARED: 'default' as const,
+  REJECTED: 'destructive' as const,
+  ENDORSED: 'secondary' as const,
+  DELIVERED: 'secondary' as const,
+  CASHED: 'default' as const,
+  VOIDED: 'destructive' as const,
+};
+
+// ====================================
+// CASHFLOW PROJECTION SCHEMAS
+// ====================================
+
+export const createProjectionSchema = z.object({
+  type: z.enum(['INCOME', 'EXPENSE'], { message: 'Debe seleccionar un tipo' }),
+  category: z.enum(['SALES', 'PURCHASES', 'SALARIES', 'TAXES', 'RENT', 'SERVICES', 'OTHER'], {
+    message: 'Debe seleccionar una categoría',
+  }),
+  description: z
+    .string()
+    .min(1, 'La descripción es requerida')
+    .max(300, 'La descripción no puede exceder 300 caracteres'),
+  amount: z
+    .string()
+    .min(1, 'El monto es requerido')
+    .regex(/^\d+(\.\d{1,2})?$/, 'Monto inválido (máximo 2 decimales)')
+    .refine((val) => parseFloat(val) > 0, 'El monto debe ser mayor a 0'),
+  date: z.date({ message: 'La fecha es requerida' }),
+  isRecurring: z.boolean().default(false),
+  notes: z.string().max(500, 'Las notas no pueden exceder 500 caracteres').optional().nullable(),
+});
+
+// ====================================
+// TYPE INFERENCE - PROJECTIONS
+// ====================================
+
+export type CreateProjectionFormData = z.infer<typeof createProjectionSchema>;
+
+// ====================================
+// LABELS Y MAPPERS - PROJECTIONS
+// ====================================
+
+export const PROJECTION_TYPE_LABELS = {
+  INCOME: 'Ingreso',
+  EXPENSE: 'Egreso',
+} as const;
+
+export const PROJECTION_TYPE_BADGES = {
+  INCOME: 'default' as const,
+  EXPENSE: 'destructive' as const,
+};
+
+export const PROJECTION_CATEGORY_LABELS = {
+  SALES: 'Ventas',
+  PURCHASES: 'Compras',
+  SALARIES: 'Sueldos',
+  TAXES: 'Impuestos',
+  RENT: 'Alquiler',
+  SERVICES: 'Servicios',
+  OTHER: 'Otros',
+} as const;
+
+// ====================================
+// PROJECTION STATUS LABELS
+// ====================================
+
+export const PROJECTION_STATUS_LABELS = {
+  PENDING: 'Pendiente',
+  PARTIAL: 'Parcial',
+  CONFIRMED: 'Confirmada',
+} as const;
+
+export const PROJECTION_STATUS_BADGES = {
+  PENDING: 'secondary' as const,
+  PARTIAL: 'warning' as const,
+  CONFIRMED: 'success' as const,
+};
+
+// ====================================
+// LINK DOCUMENT SCHEMA
+// ====================================
+
+export const linkDocumentToProjectionSchema = z
+  .object({
+    projectionId: z.string().uuid('ID de proyección inválido'),
+    amount: z
+      .string()
+      .min(1, 'El monto es requerido')
+      .regex(/^\d+(\.\d{1,2})?$/, 'Monto inválido (máximo 2 decimales)')
+      .refine((val) => parseFloat(val) > 0, 'El monto debe ser mayor a 0'),
+    salesInvoiceId: z.string().uuid().optional().nullable(),
+    purchaseInvoiceId: z.string().uuid().optional().nullable(),
+    expenseId: z.string().uuid().optional().nullable(),
+    notes: z.string().max(500, 'Las notas no pueden exceder 500 caracteres').optional().nullable(),
+  })
+  .refine(
+    (data) => {
+      const fks = [data.salesInvoiceId, data.purchaseInvoiceId, data.expenseId].filter(Boolean);
+      return fks.length === 1;
+    },
+    { message: 'Debe vincular exactamente un documento' }
+  );
+
+export type LinkDocumentFormData = z.infer<typeof linkDocumentToProjectionSchema>;

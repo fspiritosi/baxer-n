@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 
 import { Button } from '@/shared/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
+import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
 import {
   UrlTabs,
   UrlTabsList,
@@ -11,23 +12,33 @@ import {
   UrlTabsContent,
 } from '@/shared/components/ui/url-tabs';
 import { getBankAccountById } from '../actions.server';
-import { getBankAccountMovements, getReconciliationStats } from '../../bank-movements/actions.server';
+import { getBankMovementsPaginated, getReconciliationStats } from '../../bank-movements/actions.server';
 import { _BankMovementsTable } from './components/_BankMovementsTable';
 import { _BankAccountSummary } from './components/_BankAccountSummary';
 import { _BankAccountDetailActions } from './components/_BankAccountDetailActions';
 import { _ReconciliationView } from './components/_ReconciliationView';
+import { _BankMovementFilters } from './components/_BankMovementFilters';
 
 interface Props {
   bankAccountId: string;
-  searchParams: Record<string, string>;
+  searchParams: DataTableSearchParams;
 }
 
 export async function BankAccountDetail({ bankAccountId, searchParams }: Props) {
-  const tab = (searchParams.tab as 'movements' | 'reconciliation') || 'movements';
+  const params = searchParams as Record<string, string>;
+  const tab = (params.tab as 'movements' | 'reconciliation') || 'movements';
 
-  const [bankAccount, movements, reconciliationStats] = await Promise.all([
+  // Parse filter params
+  const filters = {
+    type: params.movementType || undefined,
+    dateFrom: params.dateFrom ? new Date(params.dateFrom) : undefined,
+    dateTo: params.dateTo ? new Date(`${params.dateTo}T23:59:59`) : undefined,
+  };
+
+  const [bankAccount, movementsResult, pendingResult, reconciliationStats] = await Promise.all([
     getBankAccountById(bankAccountId),
-    getBankAccountMovements(bankAccountId, 100),
+    getBankMovementsPaginated(bankAccountId, searchParams, { ...filters }),
+    getBankMovementsPaginated(bankAccountId, searchParams, { reconciled: false, ...filters }),
     getReconciliationStats(bankAccountId),
   ]);
 
@@ -83,10 +94,12 @@ export async function BankAccountDetail({ bankAccountId, searchParams }: Props) 
                 Historial completo de movimientos de la cuenta
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              <_BankMovementFilters />
               <_BankMovementsTable
-                movements={movements}
-                bankAccountId={bankAccountId}
+                data={movementsResult.data}
+                totalRows={movementsResult.total}
+                searchParams={searchParams}
               />
             </CardContent>
           </Card>
@@ -94,9 +107,11 @@ export async function BankAccountDetail({ bankAccountId, searchParams }: Props) 
 
         <UrlTabsContent value="reconciliation">
           <_ReconciliationView
-            movements={movements}
-            bankAccountId={bankAccountId}
+            data={pendingResult.data}
+            totalRows={pendingResult.total}
+            searchParams={searchParams}
             stats={reconciliationStats}
+            bankAccountId={bankAccountId}
           />
         </UrlTabsContent>
       </UrlTabs>

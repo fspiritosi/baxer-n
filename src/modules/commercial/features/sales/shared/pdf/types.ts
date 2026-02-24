@@ -64,4 +64,7 @@ export interface InvoicePDFData {
 
   // Observaciones
   notes?: string;
+
+  // Documentos vinculados (opcional, según selección del usuario)
+  linkedDocuments?: import('@/modules/commercial/shared/pdf/linked-documents-types').LinkedDocumentsData;
 }

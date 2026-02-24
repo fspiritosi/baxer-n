@@ -1,6 +1,6 @@
 'use client';
 
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -22,18 +22,49 @@ import {
 } from '@/shared/components/ui/select';
 import { Input } from '@/shared/components/ui/input';
 import { Textarea } from '@/shared/components/ui/textarea';
-import { Plus, Trash2 } from 'lucide-react';
-import { createPurchaseInvoice, updatePurchaseInvoice } from '../../list/actions.server';
+import { Plus, Trash2, Loader2 } from 'lucide-react';
+import {
+  createPurchaseInvoice,
+  updatePurchaseInvoice,
+  getSupplierInvoicesForSelect,
+  getApprovedPurchaseOrdersForInvoicing,
+  getPurchaseOrderLinesForInvoicing,
+} from '../../list/actions.server';
+import { isCreditNote, isDebitNote } from '@/modules/commercial/shared/voucher-utils';
 import {
   purchaseInvoiceFormSchema,
   VOUCHER_TYPE_LABELS,
   type PurchaseInvoiceFormInput,
 } from '../../shared/validators';
 import moment from 'moment';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/shared/components/ui/card';
 import { Separator } from '@/shared/components/ui/separator';
 import type { SupplierSelectItem, ProductSelectItem } from '../../list/actions.server';
+
+const formatCurrency = (value: number) =>
+  `$${value.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+function _PurchaseLineTotals({ form, index }: { form: ReturnType<typeof useForm<PurchaseInvoiceFormInput>>; index: number }) {
+  const line = useWatch({ control: form.control, name: `lines.${index}` });
+
+  const qty = parseFloat(line?.quantity ?? '0');
+  const price = parseFloat(line?.unitCost ?? '0');
+  const vat = parseFloat(line?.vatRate ?? '0');
+
+  const neto = isNaN(qty) || isNaN(price) ? 0 : Math.round(qty * price * 100) / 100;
+  const iva = isNaN(vat) ? 0 : Math.round(neto * (vat / 100) * 100) / 100;
+  const total = Math.round((neto + iva) * 100) / 100;
+
+  return (
+    <div className="flex justify-end gap-4 text-sm text-muted-foreground font-mono pt-1">
+      <span>Neto: {formatCurrency(neto)}</span>
+      <span>IVA: {formatCurrency(iva)}</span>
+      <span className="font-semibold text-foreground">Total: {formatCurrency(total)}</span>
+    </div>
+  );
+}
 
 interface PurchaseInvoiceFormProps {
   suppliers: SupplierSelectItem[];
@@ -52,12 +83,16 @@ export function _PurchaseInvoiceForm({
 }: PurchaseInvoiceFormProps) {
   const router = useRouter();
   const [totals, setTotals] = useState({ subtotal: 0, vatAmount: 0, total: 0 });
+  const [originalInvoices, setOriginalInvoices] = useState<Awaited<ReturnType<typeof getSupplierInvoicesForSelect>>>([]);
+  const [loadingOriginalInvoices, setLoadingOriginalInvoices] = useState(false);
 
   const form = useForm<PurchaseInvoiceFormInput>({
     resolver: zodResolver(purchaseInvoiceFormSchema),
     defaultValues: initialValues || {
       supplierId: '',
       voucherType: 'FACTURA_A',
+      originalInvoiceId: '',
+      purchaseOrderId: '',
       pointOfSale: '',
       number: '',
       issueDate: new Date(),
@@ -68,7 +103,7 @@ export function _PurchaseInvoiceForm({
     },
   });
 
-  const { fields, append, remove } = useFieldArray({
+  const { fields, append, remove, replace } = useFieldArray({
     control: form.control,
     name: 'lines',
   });
@@ -105,18 +140,117 @@ export function _PurchaseInvoiceForm({
     return () => subscription.unsubscribe();
   }, [form]);
 
+  // Cargar facturas originales cuando se selecciona NC/ND
+  const watchedVoucherType = form.watch('voucherType');
+  const watchedSupplierId = form.watch('supplierId');
+  const showOriginalInvoice = watchedVoucherType && (isCreditNote(watchedVoucherType) || isDebitNote(watchedVoucherType));
+
+  useEffect(() => {
+    if (!showOriginalInvoice || !watchedSupplierId) {
+      setOriginalInvoices([]);
+      form.setValue('originalInvoiceId', '');
+      return;
+    }
+
+    const fetchInvoices = async () => {
+      setLoadingOriginalInvoices(true);
+      try {
+        const invoices = await getSupplierInvoicesForSelect(watchedSupplierId);
+        setOriginalInvoices(invoices);
+      } catch {
+        setOriginalInvoices([]);
+      } finally {
+        setLoadingOriginalInvoices(false);
+      }
+    };
+
+    fetchInvoices();
+  }, [showOriginalInvoice, watchedSupplierId]);
+
+  // ============================================
+  // VINCULACIÓN CON ORDEN DE COMPRA
+  // ============================================
+
+  const isRegularInvoice = watchedVoucherType && !isCreditNote(watchedVoucherType) && !isDebitNote(watchedVoucherType);
+  const watchedPurchaseOrderId = form.watch('purchaseOrderId');
+
+  // OCs aprobadas del proveedor
+  const { data: purchaseOrders = [], isFetching: loadingPOs } = useQuery({
+    queryKey: ['approvedPOsForInvoicing', watchedSupplierId],
+    queryFn: () => getApprovedPurchaseOrdersForInvoicing(watchedSupplierId),
+    enabled: Boolean(watchedSupplierId) && !!isRegularInvoice,
+  });
+
+  // Líneas de la OC seleccionada
+  const { data: poLines = [], isFetching: loadingPOLines } = useQuery({
+    queryKey: ['poLinesForInvoicing', watchedPurchaseOrderId],
+    queryFn: () => getPurchaseOrderLinesForInvoicing(watchedPurchaseOrderId!),
+    enabled: Boolean(watchedPurchaseOrderId) && watchedPurchaseOrderId !== '',
+  });
+
+  // Auto-poblar líneas cuando se selecciona una OC
+  useEffect(() => {
+    if (!watchedPurchaseOrderId || watchedPurchaseOrderId === '' || loadingPOLines) return;
+
+    if (poLines.length > 0) {
+      replace(
+        poLines.map((line) => ({
+          productId: line.productId ?? undefined,
+          description: line.description,
+          quantity: String(line.pendingQty),
+          unitCost: String(line.unitCost),
+          vatRate: String(line.vatRate),
+          purchaseOrderLineId: line.id,
+        }))
+      );
+    }
+  }, [poLines, loadingPOLines, watchedPurchaseOrderId, replace]);
+
+  // Limpiar OC al cambiar proveedor
+  useEffect(() => {
+    if (watchedPurchaseOrderId) {
+      form.setValue('purchaseOrderId', '');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedSupplierId]);
+
+  // Limpiar OC al cambiar a NC/ND
+  useEffect(() => {
+    if (!isRegularInvoice && watchedPurchaseOrderId) {
+      form.setValue('purchaseOrderId', '');
+      replace([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRegularInvoice]);
+
   const onSubmit = async (data: PurchaseInvoiceFormInput) => {
+    // Validar cantidades contra líneas de OC pendientes
+    if (watchedPurchaseOrderId && watchedPurchaseOrderId !== '' && poLines.length > 0) {
+      let hasError = false;
+      data.lines.forEach((line, index) => {
+        const poLine = poLines.find((pl) => pl.id === line.purchaseOrderLineId);
+        if (poLine && parseFloat(line.quantity) > poLine.pendingQty) {
+          form.setError(`lines.${index}.quantity`, {
+            type: 'manual',
+            message: `Máximo permitido: ${poLine.pendingQty}`,
+          });
+          hasError = true;
+        }
+      });
+      if (hasError) return;
+    }
+
     try {
       if (mode === 'edit' && invoiceId) {
         // Modo edición
-        const invoice = await updatePurchaseInvoice(invoiceId, data);
+        const result = await updatePurchaseInvoice(invoiceId, data);
         toast.success('Factura de compra actualizada correctamente');
-        router.push(`/dashboard/commercial/purchases/${invoice.id}`);
+        router.push(`/dashboard/commercial/purchases/${result.id}`);
       } else {
         // Modo creación
-        const invoice = await createPurchaseInvoice(data);
+        const result = await createPurchaseInvoice(data);
         toast.success('Factura de compra creada correctamente');
-        router.push(`/dashboard/commercial/purchases/${invoice.id}`);
+        router.push(`/dashboard/commercial/purchases/${result.id}`);
       }
     } catch (error) {
       toast.error(
@@ -134,6 +268,7 @@ export function _PurchaseInvoiceForm({
       quantity: '1',
       unitCost: '0',
       vatRate: '21',
+      purchaseOrderLineId: '',
     });
   };
 
@@ -148,7 +283,7 @@ export function _PurchaseInvoiceForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="space-y-6">
         {/* Datos del Comprobante */}
         <Card className="p-6">
           <h3 className="text-lg font-semibold mb-4">Datos del Comprobante</h3>
@@ -204,6 +339,100 @@ export function _PurchaseInvoiceForm({
                 </FormItem>
               )}
             />
+
+            {/* Factura Original (solo para NC/ND) */}
+            {showOriginalInvoice && (
+              <FormField
+                control={form.control}
+                name="originalInvoiceId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Factura Original (opcional)</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value || ''}
+                      disabled={loadingOriginalInvoices}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue
+                            placeholder={
+                              loadingOriginalInvoices
+                                ? 'Cargando facturas...'
+                                : 'Seleccionar factura original'
+                            }
+                          />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {originalInvoices.map((inv) => (
+                          <SelectItem key={inv.id} value={inv.id}>
+                            {inv.fullNumber} - ${inv.total.toLocaleString('es-AR', { minimumFractionDigits: 2 })} - {moment(inv.issueDate).format('DD/MM/YYYY')}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-sm text-muted-foreground">
+                      Vincula esta {isCreditNote(watchedVoucherType) ? 'nota de crédito' : 'nota de débito'} a una factura existente
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {/* Orden de Compra (solo facturas regulares, si hay OCs disponibles) */}
+            {isRegularInvoice && watchedSupplierId && (
+              <FormField
+                control={form.control}
+                name="purchaseOrderId"
+                render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>Orden de Compra (opcional)</FormLabel>
+                    <Select
+                      onValueChange={(value) => {
+                        const actualValue = value === '__none__' ? '' : value;
+                        field.onChange(actualValue);
+                        if (!actualValue) {
+                          replace([]);
+                        }
+                      }}
+                      value={field.value || '__none__'}
+                      disabled={loadingPOs}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue
+                            placeholder={
+                              loadingPOs
+                                ? 'Cargando órdenes...'
+                                : purchaseOrders.length === 0
+                                  ? 'No hay OC pendientes de facturar'
+                                  : 'Seleccionar orden de compra'
+                            }
+                          />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="__none__">Sin orden de compra</SelectItem>
+                        {purchaseOrders.map((po) => (
+                          <SelectItem key={po.id} value={po.id}>
+                            {po.fullNumber} - {moment.utc(po.issueDate).format('DD/MM/YYYY')} - ${po.total.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {loadingPOLines && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Cargando líneas de la OC...
+                      </div>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             {/* Punto de Venta */}
             <FormField
@@ -469,6 +698,8 @@ export function _PurchaseInvoiceForm({
                     )}
                   />
                 </div>
+
+                <_PurchaseLineTotals form={form} index={index} />
               </Card>
             ))}
           </div>

@@ -3,6 +3,12 @@
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { logger } from '@/shared/lib/logger';
 import { prisma } from '@/shared/lib/prisma';
+import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
+import {
+  buildSearchWhere,
+  parseSearchParams,
+  stateToPrismaParams,
+} from '@/shared/components/common/DataTable/helpers';
 import type { BankAccountWithBalance } from '../../../shared/types';
 
 interface GetBankAccountsParams {
@@ -54,6 +60,69 @@ export async function getBankAccounts(
     })) as BankAccountWithBalance[];
   } catch (error) {
     logger.error('Error al obtener cuentas bancarias', { data: { error } });
+    throw new Error('Error al obtener cuentas bancarias');
+  }
+}
+
+/**
+ * Obtiene cuentas bancarias con paginación server-side para DataTable
+ */
+export async function getBankAccountsPaginated(searchParams: DataTableSearchParams) {
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const state = parseSearchParams(searchParams);
+    const { skip, take, orderBy } = stateToPrismaParams(state);
+
+    const searchWhere = buildSearchWhere(state.search, [
+      'bankName',
+      'accountNumber',
+      'cbu',
+      'alias',
+    ]);
+
+    const where = {
+      companyId,
+      ...searchWhere,
+    };
+
+    const [bankAccounts, total] = await Promise.all([
+      prisma.bankAccount.findMany({
+        where,
+        skip,
+        take,
+        orderBy: orderBy || [{ bankName: 'asc' }, { accountNumber: 'asc' }],
+        select: {
+          id: true,
+          bankName: true,
+          accountNumber: true,
+          accountType: true,
+          cbu: true,
+          alias: true,
+          currency: true,
+          balance: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+          _count: {
+            select: {
+              movements: true,
+            },
+          },
+        },
+      }),
+      prisma.bankAccount.count({ where }),
+    ]);
+
+    const data = bankAccounts.map((account) => ({
+      ...account,
+      balance: Number(account.balance),
+    })) as BankAccountWithBalance[];
+
+    return { data, total };
+  } catch (error) {
+    logger.error('Error al obtener cuentas bancarias paginadas', { data: { error } });
     throw new Error('Error al obtener cuentas bancarias');
   }
 }

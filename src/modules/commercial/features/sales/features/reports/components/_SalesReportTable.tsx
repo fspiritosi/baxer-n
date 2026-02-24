@@ -1,7 +1,10 @@
 'use client';
 
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
+import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { cn } from '@/shared/lib/utils';
 import moment from 'moment';
 import { VOUCHER_TYPE_LABELS, INVOICE_STATUS_LABELS } from '../../invoices/shared/validators';
 import { customerTaxConditionLabels } from '@/shared/utils/mappers';
@@ -113,7 +116,94 @@ interface Props {
   endDate?: Date;
 }
 
+// --- Sorting helpers ---
+
+type SortConfig = { key: string; direction: 'asc' | 'desc' };
+
+function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
+  return path.split('.').reduce<unknown>((acc, part) => {
+    if (acc && typeof acc === 'object') return (acc as Record<string, unknown>)[part];
+    return undefined;
+  }, obj);
+}
+
+function sortData<T>(data: T[], config: SortConfig | null): T[] {
+  if (!config) return data;
+  return [...data].sort((a, b) => {
+    const aVal = getNestedValue(a as Record<string, unknown>, config.key);
+    const bVal = getNestedValue(b as Record<string, unknown>, config.key);
+
+    if (aVal == null && bVal == null) return 0;
+    if (aVal == null) return 1;
+    if (bVal == null) return -1;
+
+    let comparison = 0;
+    if (typeof aVal === 'string' && typeof bVal === 'string') {
+      comparison = aVal.localeCompare(bVal);
+    } else if (aVal instanceof Date || bVal instanceof Date) {
+      comparison = new Date(aVal as string | Date).getTime() - new Date(bVal as string | Date).getTime();
+    } else {
+      comparison = Number(aVal) - Number(bVal);
+    }
+
+    return config.direction === 'asc' ? comparison : -comparison;
+  });
+}
+
+function SortableHeader({
+  label,
+  sortKey,
+  sortConfig,
+  onSort,
+  align,
+}: {
+  label: string;
+  sortKey: string;
+  sortConfig: SortConfig | null;
+  onSort: (key: string) => void;
+  align?: 'right';
+}) {
+  const isActive = sortConfig?.key === sortKey;
+  const Icon = isActive
+    ? sortConfig.direction === 'asc' ? ArrowUp : ArrowDown
+    : ArrowUpDown;
+
+  return (
+    <th
+      className={cn(
+        'pb-3 cursor-pointer select-none hover:text-foreground transition-colors',
+        align === 'right' && 'text-right',
+      )}
+      onClick={() => onSort(sortKey)}
+    >
+      <div className={cn('flex items-center gap-1', align === 'right' && 'justify-end')}>
+        {label}
+        <Icon className={cn('h-3 w-3 shrink-0', !isActive && 'opacity-50')} />
+      </div>
+    </th>
+  );
+}
+
+// --- Main Component ---
+
 export function _SalesReportTable({ reportType, data, startDate, endDate }: Props) {
+  const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
+
+  useEffect(() => {
+    setSortConfig(null);
+  }, [reportType]);
+
+  const handleSort = useCallback((key: string) => {
+    setSortConfig((prev) => {
+      if (prev?.key === key) {
+        return prev.direction === 'asc'
+          ? { key, direction: 'desc' as const }
+          : null;
+      }
+      return { key, direction: 'asc' as const };
+    });
+  }, []);
+
   if (!data || !reportType) {
     return (
       <Card>
@@ -126,8 +216,10 @@ export function _SalesReportTable({ reportType, data, startDate, endDate }: Prop
     );
   }
 
+  const headerProps = { sortConfig, onSort: handleSort };
+
   const renderPeriodReport = (data: SalesByPeriodData) => {
-    const invoices = data.invoices || [];
+    const invoices = sortData(data.invoices || [], sortConfig);
 
     return (
       <Card>
@@ -151,65 +243,65 @@ export function _SalesReportTable({ reportType, data, startDate, endDate }: Prop
               <table className="w-full text-sm">
                 <thead className="border-b">
                   <tr className="text-left">
-                    <th className="pb-3">Fecha</th>
-                    <th className="pb-3">Nro. Comprobante</th>
-                    <th className="pb-3">Tipo</th>
-                    <th className="pb-3">Cliente</th>
-                    <th className="pb-3 text-right">Subtotal</th>
-                    <th className="pb-3 text-right">IVA</th>
-                    <th className="pb-3 text-right">Total</th>
-                    <th className="pb-3">Estado</th>
+                    <SortableHeader label="Fecha" sortKey="issueDate" {...headerProps} />
+                    <SortableHeader label="Nro. Comprobante" sortKey="fullNumber" {...headerProps} />
+                    <SortableHeader label="Tipo" sortKey="voucherType" {...headerProps} />
+                    <SortableHeader label="Cliente" sortKey="customer.name" {...headerProps} />
+                    <SortableHeader label="Subtotal" sortKey="subtotal" align="right" {...headerProps} />
+                    <SortableHeader label="IVA" sortKey="vatAmount" align="right" {...headerProps} />
+                    <SortableHeader label="Total" sortKey="total" align="right" {...headerProps} />
+                    <SortableHeader label="Estado" sortKey="status" {...headerProps} />
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {invoices.map((inv) => (
-                <tr key={inv.id}>
-                  <td className="py-3">{moment(inv.issueDate).format('DD/MM/YYYY')}</td>
-                  <td className="py-3 font-mono">{inv.fullNumber}</td>
-                  <td className="py-3">
-                    {VOUCHER_TYPE_LABELS[inv.voucherType as keyof typeof VOUCHER_TYPE_LABELS]}
-                  </td>
-                  <td className="py-3">{inv.customer.name}</td>
-                  <td className="py-3 text-right font-mono">
-                    ${Number(inv.subtotal).toFixed(2)}
-                  </td>
-                  <td className="py-3 text-right font-mono">
-                    ${Number(inv.vatAmount).toFixed(2)}
-                  </td>
-                  <td className="py-3 text-right font-mono font-semibold">
-                    ${Number(inv.total).toFixed(2)}
-                  </td>
-                  <td className="py-3">
-                    <Badge variant="outline">
-                      {INVOICE_STATUS_LABELS[inv.status as keyof typeof INVOICE_STATUS_LABELS]}
-                    </Badge>
-                  </td>
+                    <tr key={inv.id}>
+                      <td className="py-3">{moment(inv.issueDate).format('DD/MM/YYYY')}</td>
+                      <td className="py-3 font-mono">{inv.fullNumber}</td>
+                      <td className="py-3">
+                        {VOUCHER_TYPE_LABELS[inv.voucherType as keyof typeof VOUCHER_TYPE_LABELS]}
+                      </td>
+                      <td className="py-3">{inv.customer.name}</td>
+                      <td className="py-3 text-right font-mono">
+                        ${Number(inv.subtotal).toFixed(2)}
+                      </td>
+                      <td className="py-3 text-right font-mono">
+                        ${Number(inv.vatAmount).toFixed(2)}
+                      </td>
+                      <td className="py-3 text-right font-mono font-semibold">
+                        ${Number(inv.total).toFixed(2)}
+                      </td>
+                      <td className="py-3">
+                        <Badge variant="outline">
+                          {INVOICE_STATUS_LABELS[inv.status as keyof typeof INVOICE_STATUS_LABELS]}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="border-t-2 font-semibold">
+                  <tr>
+                    <td className="pt-3" colSpan={4}>
+                      TOTALES ({data.totals?.count || 0} facturas)
+                    </td>
+                    <td className="pt-3 text-right">${(data.totals?.subtotal || 0).toFixed(2)}</td>
+                    <td className="pt-3 text-right">
+                      ${(data.totals?.vatAmount || 0).toFixed(2)}
+                    </td>
+                    <td className="pt-3 text-right">${(data.totals?.total || 0).toFixed(2)}</td>
+                    <td></td>
                   </tr>
-                ))}
-              </tbody>
-              <tfoot className="border-t-2 font-semibold">
-                <tr>
-                  <td className="pt-3" colSpan={4}>
-                    TOTALES ({data.totals?.count || 0} facturas)
-                  </td>
-                  <td className="pt-3 text-right">${(data.totals?.subtotal || 0).toFixed(2)}</td>
-                  <td className="pt-3 text-right">
-                    ${(data.totals?.vatAmount || 0).toFixed(2)}
-                  </td>
-                  <td className="pt-3 text-right">${(data.totals?.total || 0).toFixed(2)}</td>
-                  <td></td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-};
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
 
   const renderCustomerReport = (data: SalesByCustomerData) => {
-    const customers = data.salesByCustomer || [];
+    const customers = sortData(data.salesByCustomer || [], sortConfig);
 
     return (
       <Card>
@@ -233,27 +325,27 @@ export function _SalesReportTable({ reportType, data, startDate, endDate }: Prop
               <table className="w-full text-sm">
                 <thead className="border-b">
                   <tr className="text-left">
-                    <th className="pb-3">Cliente</th>
-                    <th className="pb-3">CUIT</th>
-                    <th className="pb-3 text-right">Cant. Facturas</th>
-                    <th className="pb-3 text-right">Subtotal</th>
-                    <th className="pb-3 text-right">IVA</th>
-                    <th className="pb-3 text-right">Total</th>
+                    <SortableHeader label="Cliente" sortKey="customerName" {...headerProps} />
+                    <SortableHeader label="CUIT" sortKey="taxId" {...headerProps} />
+                    <SortableHeader label="Cant. Facturas" sortKey="invoiceCount" align="right" {...headerProps} />
+                    <SortableHeader label="Subtotal" sortKey="subtotal" align="right" {...headerProps} />
+                    <SortableHeader label="IVA" sortKey="vatAmount" align="right" {...headerProps} />
+                    <SortableHeader label="Total" sortKey="total" align="right" {...headerProps} />
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {customers.map((customer) => (
-                <tr key={customer.customerId}>
-                  <td className="py-3">{customer.customerName}</td>
-                  <td className="py-3 font-mono">{customer.taxId || '-'}</td>
-                  <td className="py-3 text-right">{customer.invoiceCount}</td>
-                  <td className="py-3 text-right font-mono">
-                    ${customer.subtotal.toFixed(2)}
-                  </td>
-                  <td className="py-3 text-right font-mono">${customer.vatAmount.toFixed(2)}</td>
-                  <td className="py-3 text-right font-mono font-semibold">
-                    ${customer.total.toFixed(2)}
-                  </td>
+                    <tr key={customer.customerId}>
+                      <td className="py-3">{customer.customerName}</td>
+                      <td className="py-3 font-mono">{customer.taxId || '-'}</td>
+                      <td className="py-3 text-right">{customer.invoiceCount}</td>
+                      <td className="py-3 text-right font-mono">
+                        ${customer.subtotal.toFixed(2)}
+                      </td>
+                      <td className="py-3 text-right font-mono">${customer.vatAmount.toFixed(2)}</td>
+                      <td className="py-3 text-right font-mono font-semibold">
+                        ${customer.total.toFixed(2)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -280,7 +372,7 @@ export function _SalesReportTable({ reportType, data, startDate, endDate }: Prop
   };
 
   const renderProductReport = (data: SalesByProductData) => {
-    const products = data.salesByProduct || [];
+    const products = sortData(data.salesByProduct || [], sortConfig);
 
     return (
       <Card>
@@ -304,52 +396,52 @@ export function _SalesReportTable({ reportType, data, startDate, endDate }: Prop
               <table className="w-full text-sm">
                 <thead className="border-b">
                   <tr className="text-left">
-                    <th className="pb-3">Código</th>
-                    <th className="pb-3">Producto</th>
-                    <th className="pb-3 text-right">Cantidad</th>
+                    <SortableHeader label="Código" sortKey="productCode" {...headerProps} />
+                    <SortableHeader label="Producto" sortKey="productName" {...headerProps} />
+                    <SortableHeader label="Cantidad" sortKey="quantity" align="right" {...headerProps} />
                     <th className="pb-3">UM</th>
-                    <th className="pb-3 text-right">Subtotal</th>
-                    <th className="pb-3 text-right">IVA</th>
-                    <th className="pb-3 text-right">Total</th>
+                    <SortableHeader label="Subtotal" sortKey="subtotal" align="right" {...headerProps} />
+                    <SortableHeader label="IVA" sortKey="vatAmount" align="right" {...headerProps} />
+                    <SortableHeader label="Total" sortKey="total" align="right" {...headerProps} />
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {products.map((product) => (
-                <tr key={product.productId}>
-                  <td className="py-3 font-mono">{product.productCode}</td>
-                  <td className="py-3">{product.productName}</td>
-                  <td className="py-3 text-right font-mono">{product.quantity.toFixed(3)}</td>
-                  <td className="py-3">{product.unitOfMeasure}</td>
-                  <td className="py-3 text-right font-mono">${product.subtotal.toFixed(2)}</td>
-                  <td className="py-3 text-right font-mono">${product.vatAmount.toFixed(2)}</td>
-                  <td className="py-3 text-right font-mono font-semibold">
-                    ${product.total.toFixed(2)}
-                  </td>
+                    <tr key={product.productId}>
+                      <td className="py-3 font-mono">{product.productCode}</td>
+                      <td className="py-3">{product.productName}</td>
+                      <td className="py-3 text-right font-mono">{product.quantity.toFixed(3)}</td>
+                      <td className="py-3">{product.unitOfMeasure}</td>
+                      <td className="py-3 text-right font-mono">${product.subtotal.toFixed(2)}</td>
+                      <td className="py-3 text-right font-mono">${product.vatAmount.toFixed(2)}</td>
+                      <td className="py-3 text-right font-mono font-semibold">
+                        ${product.total.toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="border-t-2 font-semibold">
+                  <tr>
+                    <td className="pt-3" colSpan={4}>
+                      TOTALES ({data.totals?.productCount || 0} productos)
+                    </td>
+                    <td className="pt-3 text-right">${(data.totals?.subtotal || 0).toFixed(2)}</td>
+                    <td className="pt-3 text-right">
+                      ${(data.totals?.vatAmount || 0).toFixed(2)}
+                    </td>
+                    <td className="pt-3 text-right">${(data.totals?.total || 0).toFixed(2)}</td>
                   </tr>
-                ))}
-              </tbody>
-              <tfoot className="border-t-2 font-semibold">
-                <tr>
-                  <td className="pt-3" colSpan={4}>
-                    TOTALES ({data.totals?.productCount || 0} productos)
-                  </td>
-                  <td className="pt-3 text-right">${(data.totals?.subtotal || 0).toFixed(2)}</td>
-                  <td className="pt-3 text-right">
-                    ${(data.totals?.vatAmount || 0).toFixed(2)}
-                  </td>
-                  <td className="pt-3 text-right">${(data.totals?.total || 0).toFixed(2)}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-};
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
 
   const renderVATReport = (data: VATSalesBookData) => {
-    const vatBook = data.vatBook || [];
+    const vatBook = sortData(data.vatBook || [], sortConfig);
     const vatSummary = data.vatSummary || [];
 
     return (
@@ -375,99 +467,99 @@ export function _SalesReportTable({ reportType, data, startDate, endDate }: Prop
                 <table className="w-full text-sm">
                   <thead className="border-b">
                     <tr className="text-left">
-                      <th className="pb-3">Fecha</th>
-                      <th className="pb-3">Comprobante</th>
-                      <th className="pb-3">Cliente</th>
-                      <th className="pb-3">CUIT</th>
+                      <SortableHeader label="Fecha" sortKey="issueDate" {...headerProps} />
+                      <SortableHeader label="Comprobante" sortKey="fullNumber" {...headerProps} />
+                      <SortableHeader label="Cliente" sortKey="customerName" {...headerProps} />
+                      <SortableHeader label="CUIT" sortKey="customerTaxId" {...headerProps} />
                       <th className="pb-3">Cond. IVA</th>
-                      <th className="pb-3 text-right">Neto</th>
-                      <th className="pb-3 text-right">IVA</th>
-                      <th className="pb-3 text-right">Total</th>
+                      <SortableHeader label="Neto" sortKey="subtotal" align="right" {...headerProps} />
+                      <SortableHeader label="IVA" sortKey="vatAmount" align="right" {...headerProps} />
+                      <SortableHeader label="Total" sortKey="total" align="right" {...headerProps} />
                       <th className="pb-3">CAE</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
                     {vatBook.map((inv) => (
-                  <tr key={inv.id}>
-                    <td className="py-3">{moment(inv.issueDate).format('DD/MM/YYYY')}</td>
-                    <td className="py-3 font-mono text-xs">{inv.fullNumber}</td>
-                    <td className="py-3">{inv.customerName}</td>
-                    <td className="py-3 font-mono text-xs">{inv.customerTaxId || '-'}</td>
-                    <td className="py-3 text-xs">
-                      {customerTaxConditionLabels[inv.customerTaxCondition as keyof typeof customerTaxConditionLabels] || inv.customerTaxCondition}
-                    </td>
-                    <td className="py-3 text-right font-mono">${inv.subtotal.toFixed(2)}</td>
-                    <td className="py-3 text-right font-mono">${inv.vatAmount.toFixed(2)}</td>
-                    <td className="py-3 text-right font-mono font-semibold">
-                      ${inv.total.toFixed(2)}
-                    </td>
-                    <td className="py-3 font-mono text-xs">{inv.cae || '-'}</td>
+                      <tr key={inv.id}>
+                        <td className="py-3">{moment(inv.issueDate).format('DD/MM/YYYY')}</td>
+                        <td className="py-3 font-mono text-xs">{inv.fullNumber}</td>
+                        <td className="py-3">{inv.customerName}</td>
+                        <td className="py-3 font-mono text-xs">{inv.customerTaxId || '-'}</td>
+                        <td className="py-3 text-xs">
+                          {customerTaxConditionLabels[inv.customerTaxCondition as keyof typeof customerTaxConditionLabels] || inv.customerTaxCondition}
+                        </td>
+                        <td className="py-3 text-right font-mono">${inv.subtotal.toFixed(2)}</td>
+                        <td className="py-3 text-right font-mono">${inv.vatAmount.toFixed(2)}</td>
+                        <td className="py-3 text-right font-mono font-semibold">
+                          ${inv.total.toFixed(2)}
+                        </td>
+                        <td className="py-3 font-mono text-xs">{inv.cae || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="border-t-2 font-semibold">
+                    <tr>
+                      <td className="pt-3" colSpan={5}>
+                        TOTALES ({data.totals?.invoiceCount || 0} facturas)
+                      </td>
+                      <td className="pt-3 text-right">
+                        ${(data.totals?.subtotal || 0).toFixed(2)}
+                      </td>
+                      <td className="pt-3 text-right">
+                        ${(data.totals?.vatAmount || 0).toFixed(2)}
+                      </td>
+                      <td className="pt-3 text-right">${(data.totals?.total || 0).toFixed(2)}</td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Resumen por alícuota */}
+        {vatSummary.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Resumen IVA por Alícuota</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <table className="w-full text-sm">
+                <thead className="border-b">
+                  <tr className="text-left">
+                    <th className="pb-3">Alícuota</th>
+                    <th className="pb-3 text-right">Base Imponible</th>
+                    <th className="pb-3 text-right">Impuesto</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {vatSummary.map((vat) => (
+                    <tr key={vat.rate}>
+                      <td className="py-3 font-semibold">{vat.rate}%</td>
+                      <td className="py-3 text-right font-mono">${vat.base.toFixed(2)}</td>
+                      <td className="py-3 text-right font-mono">${vat.amount.toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot className="border-t-2 font-semibold">
                   <tr>
-                    <td className="pt-3" colSpan={5}>
-                      TOTALES ({data.totals?.invoiceCount || 0} facturas)
+                    <td className="pt-3">TOTAL</td>
+                    <td className="pt-3 text-right">
+                      ${vatSummary.reduce((sum, v) => sum + v.base, 0).toFixed(2)}
                     </td>
                     <td className="pt-3 text-right">
-                      ${(data.totals?.subtotal || 0).toFixed(2)}
+                      ${vatSummary.reduce((sum, v) => sum + v.amount, 0).toFixed(2)}
                     </td>
-                    <td className="pt-3 text-right">
-                      ${(data.totals?.vatAmount || 0).toFixed(2)}
-                    </td>
-                    <td className="pt-3 text-right">${(data.totals?.total || 0).toFixed(2)}</td>
-                    <td></td>
                   </tr>
                 </tfoot>
               </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Resumen por alícuota */}
-      {vatSummary.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Resumen IVA por Alícuota</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <table className="w-full text-sm">
-              <thead className="border-b">
-                <tr className="text-left">
-                  <th className="pb-3">Alícuota</th>
-                  <th className="pb-3 text-right">Base Imponible</th>
-                  <th className="pb-3 text-right">Impuesto</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {vatSummary.map((vat) => (
-                  <tr key={vat.rate}>
-                    <td className="py-3 font-semibold">{vat.rate}%</td>
-                    <td className="py-3 text-right font-mono">${vat.base.toFixed(2)}</td>
-                    <td className="py-3 text-right font-mono">${vat.amount.toFixed(2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot className="border-t-2 font-semibold">
-                <tr>
-                  <td className="pt-3">TOTAL</td>
-                  <td className="pt-3 text-right">
-                    ${vatSummary.reduce((sum, v) => sum + v.base, 0).toFixed(2)}
-                  </td>
-                  <td className="pt-3 text-right">
-                    ${vatSummary.reduce((sum, v) => sum + v.amount, 0).toFixed(2)}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </CardContent>
-        </Card>
-      )}
-    </>
-  );
-};
+            </CardContent>
+          </Card>
+        )}
+      </>
+    );
+  };
 
   switch (reportType) {
     case 'period':

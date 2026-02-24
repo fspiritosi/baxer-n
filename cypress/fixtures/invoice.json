@@ -1,0 +1,10 @@
+{
+  "salesInvoice": {
+    "voucherType": "FACTURA_A",
+    "notes": "Factura de venta test E2E"
+  },
+  "purchaseInvoice": {
+    "voucherType": "FACTURA_A",
+    "notes": "Factura de compra test E2E"
+  }
+}

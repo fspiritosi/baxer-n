@@ -21,11 +21,16 @@
  * 4. Orden de Pago (confirmada):
  *    - Debe: Cuentas por Pagar
  *    - Haber: Caja/Banco
+ *
+ * 5. Gasto (confirmado):
+ *    - Debe: Gastos Operativos
+ *    - Haber: Cuentas por Pagar
  */
 
 import { Prisma } from '@/generated/prisma/client';
 import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
+import { isCreditNote } from '@/modules/commercial/shared/voucher-utils';
 
 // Tipo para el cliente de transacción de Prisma
 type PrismaTransactionClient = Omit<
@@ -69,6 +74,7 @@ async function getAccountingSettings(companyId: string, tx?: PrismaTransactionCl
       vatCreditAccount: true,
       defaultCashAccount: true,
       defaultBankAccount: true,
+      expensesAccount: true,
     },
   });
 
@@ -77,6 +83,32 @@ async function getAccountingSettings(companyId: string, tx?: PrismaTransactionCl
   }
 
   return settings;
+}
+
+// ============================================
+// HELPER: Obtener cuenta de retención
+// ============================================
+
+function getWithholdingAccountId(
+  settings: Awaited<ReturnType<typeof getAccountingSettings>>,
+  taxType: string,
+  role: 'emitted' | 'suffered'
+): string | null {
+  const map: Record<string, Record<string, string | null | undefined>> = {
+    emitted: {
+      IVA: settings.withholdingIvaEmittedAccountId,
+      GANANCIAS: settings.withholdingGananciasEmittedAccountId,
+      IIBB: settings.withholdingIibbEmittedAccountId,
+      SUSS: settings.withholdingSussEmittedAccountId,
+    },
+    suffered: {
+      IVA: settings.withholdingIvaSufferedAccountId,
+      GANANCIAS: settings.withholdingGananciasSufferedAccountId,
+      IIBB: settings.withholdingIibbSufferedAccountId,
+      SUSS: settings.withholdingSussSufferedAccountId,
+    },
+  };
+  return map[role]?.[taxType] ?? null;
 }
 
 // ============================================
@@ -182,6 +214,7 @@ export async function createJournalEntryForSalesInvoice(
       where: { id: invoiceId },
       select: {
         fullNumber: true,
+        voucherType: true,
         issueDate: true,
         subtotal: true,
         vatAmount: true,
@@ -197,27 +230,29 @@ export async function createJournalEntryForSalesInvoice(
     const subtotal = parseFloat(invoice.subtotal.toString());
     const vatAmount = parseFloat(invoice.vatAmount.toString());
     const total = parseFloat(invoice.total.toString());
+    const isNC = isCreditNote(invoice.voucherType);
+
+    // NC invierte el asiento: Debe=Ventas+IVA, Haber=CtasCobrar
+    // ND y Factura: Debe=CtasCobrar, Haber=Ventas+IVA
+    const docLabel = isNC ? 'Nota de crédito' : 'Factura de venta';
 
     const lines: JournalEntryLineInput[] = [
-      // Debe: Cuentas por Cobrar (activo aumenta)
       {
         accountId: settings.receivablesAccountId,
-        debit: total,
-        credit: 0,
-        description: `Factura de venta ${invoice.fullNumber} - ${invoice.customer.name}`,
+        debit: isNC ? 0 : total,
+        credit: isNC ? total : 0,
+        description: `${docLabel} ${invoice.fullNumber} - ${invoice.customer.name}`,
       },
-      // Haber: Ventas (ingreso)
       {
         accountId: settings.salesAccountId,
-        debit: 0,
-        credit: subtotal,
+        debit: isNC ? subtotal : 0,
+        credit: isNC ? 0 : subtotal,
         description: `Ventas - ${invoice.fullNumber}`,
       },
-      // Haber: IVA Débito Fiscal (pasivo aumenta)
       {
         accountId: settings.vatDebitAccountId,
-        debit: 0,
-        credit: vatAmount,
+        debit: isNC ? vatAmount : 0,
+        credit: isNC ? 0 : vatAmount,
         description: `IVA Débito Fiscal - ${invoice.fullNumber}`,
       },
     ];
@@ -226,7 +261,7 @@ export async function createJournalEntryForSalesInvoice(
       {
         companyId,
         date: invoice.issueDate,
-        description: `Factura de venta ${invoice.fullNumber}`,
+        description: `${docLabel} ${invoice.fullNumber}`,
         lines,
       },
       tx
@@ -265,7 +300,8 @@ export async function createJournalEntryForPurchaseInvoice(
     const invoice = await tx.purchaseInvoice.findUnique({
       where: { id: invoiceId },
       select: {
-        number: true,
+        fullNumber: true,
+        voucherType: true,
         issueDate: true,
         subtotal: true,
         vatAmount: true,
@@ -281,28 +317,30 @@ export async function createJournalEntryForPurchaseInvoice(
     const subtotal = parseFloat(invoice.subtotal.toString());
     const vatAmount = parseFloat(invoice.vatAmount.toString());
     const total = parseFloat(invoice.total.toString());
+    const isNC = isCreditNote(invoice.voucherType);
+
+    // NC invierte: Debe=CtasPagar, Haber=Compras+IVA
+    // ND y Factura: Debe=Compras+IVA, Haber=CtasPagar
+    const docLabel = isNC ? 'Nota de crédito de compra' : 'Factura de compra';
 
     const lines: JournalEntryLineInput[] = [
-      // Debe: Compras (gasto)
       {
         accountId: settings.purchasesAccountId,
-        debit: subtotal,
-        credit: 0,
-        description: `Compras - ${invoice.number}`,
+        debit: isNC ? 0 : subtotal,
+        credit: isNC ? subtotal : 0,
+        description: `Compras - ${invoice.fullNumber}`,
       },
-      // Debe: IVA Crédito Fiscal (activo aumenta)
       {
         accountId: settings.vatCreditAccountId,
-        debit: vatAmount,
-        credit: 0,
-        description: `IVA Crédito Fiscal - ${invoice.number}`,
+        debit: isNC ? 0 : vatAmount,
+        credit: isNC ? vatAmount : 0,
+        description: `IVA Crédito Fiscal - ${invoice.fullNumber}`,
       },
-      // Haber: Cuentas por Pagar (pasivo aumenta)
       {
         accountId: settings.payablesAccountId,
-        debit: 0,
-        credit: total,
-        description: `Factura de compra ${invoice.number} - ${invoice.supplier.businessName}`,
+        debit: isNC ? total : 0,
+        credit: isNC ? 0 : total,
+        description: `${docLabel} ${invoice.fullNumber} - ${invoice.supplier.businessName}`,
       },
     ];
 
@@ -310,7 +348,7 @@ export async function createJournalEntryForPurchaseInvoice(
       {
         companyId,
         date: invoice.issueDate,
-        description: `Factura de compra ${invoice.number}`,
+        description: `${docLabel} ${invoice.fullNumber}`,
         lines,
       },
       tx
@@ -345,7 +383,7 @@ export async function createJournalEntryForReceipt(
       return null;
     }
 
-    // Obtener recibo con sus pagos
+    // Obtener recibo con sus pagos y retenciones
     const receipt = await tx.receipt.findUnique({
       where: { id: receiptId },
       select: {
@@ -360,6 +398,12 @@ export async function createJournalEntryForReceipt(
             bankAccountId: true,
             cashRegister: { select: { accountId: true } },
             bankAccount: { select: { accountId: true } },
+          },
+        },
+        withholdings: {
+          select: {
+            taxType: true,
+            amount: true,
           },
         },
       },
@@ -412,6 +456,26 @@ export async function createJournalEntryForReceipt(
       });
     }
 
+    // Debe: Retenciones Sufridas (activo, crédito fiscal)
+    for (const withholding of receipt.withholdings) {
+      const whAmount = parseFloat(withholding.amount.toString());
+      const accountId = getWithholdingAccountId(settings, withholding.taxType, 'suffered');
+
+      if (!accountId) {
+        logger.warn('No se encontró cuenta contable para retención sufrida', {
+          data: { receiptId, taxType: withholding.taxType },
+        });
+        continue;
+      }
+
+      lines.push({
+        accountId,
+        debit: whAmount,
+        credit: 0,
+        description: `Ret. ${withholding.taxType} sufrida - ${receipt.fullNumber}`,
+      });
+    }
+
     if (lines.length < 2) {
       logger.warn('No se pudieron crear líneas suficientes para el recibo', {
         data: { receiptId },
@@ -458,7 +522,7 @@ export async function createJournalEntryForPaymentOrder(
       return null;
     }
 
-    // Obtener orden de pago con sus pagos
+    // Obtener orden de pago con sus pagos y retenciones
     const paymentOrder = await tx.paymentOrder.findUnique({
       where: { id: paymentOrderId },
       select: {
@@ -480,6 +544,12 @@ export async function createJournalEntryForPaymentOrder(
             bankAccount: { select: { accountId: true } },
           },
         },
+        withholdings: {
+          select: {
+            taxType: true,
+            amount: true,
+          },
+        },
       },
     });
 
@@ -495,7 +565,7 @@ export async function createJournalEntryForPaymentOrder(
       accountId: settings.payablesAccountId,
       debit: total,
       credit: 0,
-      description: `Orden de pago ${paymentOrder.fullNumber} - ${paymentOrder.supplier.tradeName || paymentOrder.supplier.businessName}`,
+      description: `Orden de pago ${paymentOrder.fullNumber}${paymentOrder.supplier ? ` - ${paymentOrder.supplier.tradeName || paymentOrder.supplier.businessName}` : ''}`,
     });
 
     // Haber: Caja/Banco (activo disminuye)
@@ -530,6 +600,26 @@ export async function createJournalEntryForPaymentOrder(
       });
     }
 
+    // Haber: Retenciones Emitidas (pasivo, por pagar a AFIP)
+    for (const withholding of paymentOrder.withholdings) {
+      const whAmount = parseFloat(withholding.amount.toString());
+      const accountId = getWithholdingAccountId(settings, withholding.taxType, 'emitted');
+
+      if (!accountId) {
+        logger.warn('No se encontró cuenta contable para retención emitida', {
+          data: { paymentOrderId, taxType: withholding.taxType },
+        });
+        continue;
+      }
+
+      lines.push({
+        accountId,
+        debit: 0,
+        credit: whAmount,
+        description: `Ret. ${withholding.taxType} emitida - ${paymentOrder.fullNumber}`,
+      });
+    }
+
     if (lines.length < 2) {
       logger.warn('No se pudieron crear líneas suficientes para la orden de pago', {
         data: { paymentOrderId },
@@ -551,6 +641,79 @@ export async function createJournalEntryForPaymentOrder(
   } catch (error) {
     logger.error('Error al crear asiento para orden de pago', {
       data: { error, paymentOrderId, companyId },
+    });
+    throw error;
+  }
+}
+
+// ============================================
+// INTEGRACIÓN: Gasto
+// ============================================
+
+export async function createJournalEntryForExpense(
+  expenseId: string,
+  companyId: string,
+  tx: PrismaTransactionClient
+): Promise<string | null> {
+  try {
+    const settings = await getAccountingSettings(companyId, tx);
+
+    // Verificar que estén configuradas las cuentas necesarias
+    if (!settings.expensesAccountId || !settings.payablesAccountId) {
+      logger.warn('No se puede crear asiento para gasto: cuentas no configuradas', {
+        data: { expenseId, companyId },
+      });
+      return null;
+    }
+
+    // Obtener gasto
+    const expense = await tx.expense.findUnique({
+      where: { id: expenseId },
+      select: {
+        fullNumber: true,
+        description: true,
+        date: true,
+        amount: true,
+        supplier: { select: { businessName: true } },
+      },
+    });
+
+    if (!expense) {
+      throw new Error('Gasto no encontrado');
+    }
+
+    const amount = parseFloat(expense.amount.toString());
+    const supplierName = expense.supplier?.businessName;
+
+    const lines: JournalEntryLineInput[] = [
+      {
+        accountId: settings.expensesAccountId,
+        debit: amount,
+        credit: 0,
+        description: `Gasto ${expense.fullNumber} - ${expense.description}`,
+      },
+      {
+        accountId: settings.payablesAccountId,
+        debit: 0,
+        credit: amount,
+        description: `Gasto ${expense.fullNumber}${supplierName ? ` - ${supplierName}` : ''}`,
+      },
+    ];
+
+    const entryId = await createJournalEntry(
+      {
+        companyId,
+        date: expense.date,
+        description: `Gasto ${expense.fullNumber} - ${expense.description}`,
+        lines,
+      },
+      tx
+    );
+
+    return entryId;
+  } catch (error) {
+    logger.error('Error al crear asiento para gasto', {
+      data: { error, expenseId, companyId },
     });
     throw error;
   }

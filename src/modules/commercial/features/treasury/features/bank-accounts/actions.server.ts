@@ -63,7 +63,7 @@ export async function createBankAccount(data: BankAccountFormData) {
 
     revalidatePath('/dashboard/commercial/treasury/bank-accounts');
 
-    return { success: true, data: bankAccount };
+    return { success: true, id: bankAccount.id };
   } catch (error) {
     logger.error('Error al crear cuenta bancaria', { data: { error } });
     if (error instanceof Error) {
@@ -137,7 +137,7 @@ export async function updateBankAccount(id: string, data: BankAccountFormData) {
 
     revalidatePath('/dashboard/commercial/treasury/bank-accounts');
 
-    return { success: true, data: bankAccount };
+    return { success: true, id: bankAccount.id };
   } catch (error) {
     logger.error('Error al actualizar cuenta bancaria', { data: { error, id } });
     if (error instanceof Error) {

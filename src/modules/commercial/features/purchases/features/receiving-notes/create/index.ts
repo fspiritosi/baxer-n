@@ -1,0 +1,1 @@
+export { CreateReceivingNote } from './CreateReceivingNote';

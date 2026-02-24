@@ -61,4 +61,7 @@ export interface ReceiptPDFData {
 
   // Observaciones
   notes?: string;
+
+  // Documentos vinculados opcionales
+  linkedDocuments?: import('@/modules/commercial/shared/pdf/linked-documents-types').LinkedDocumentsData;
 }

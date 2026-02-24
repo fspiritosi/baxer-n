@@ -1,24 +1,10 @@
 'use client';
 
-import { type ColumnDef } from '@tanstack/react-table';
-import { DataTable } from '@/shared/components/common/DataTable';
-import { Badge } from '@/shared/components/ui/badge';
-import { Button } from '@/shared/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/shared/components/ui/dropdown-menu';
-import { MoreHorizontal, CheckCircle, Eye, Download, Edit, Trash2 } from 'lucide-react';
-import { RECEIPT_STATUS_LABELS, RECEIPT_STATUS_BADGES } from '../../../../shared/validators';
-import type { ReceiptListItem } from '../../../../shared/types';
-import moment from 'moment';
-import { confirmReceipt, deleteReceipt } from '../../actions.server';
+import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { ReceiptDetailModal } from './_ReceiptDetailModal';
-import { EditReceiptModal } from './_EditReceiptModal';
-import { useState } from 'react';
+
+import { DataTable, type DataTableSearchParams } from '@/shared/components/common/DataTable';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,13 +15,21 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/shared/components/ui/alert-dialog';
+import { confirmReceipt, deleteReceipt } from '../../actions.server';
+import type { ReceiptListItem } from '../../../../shared/types';
+import { getColumns } from '../columns';
+import { ReceiptDetailModal } from './_ReceiptDetailModal';
+import { EditReceiptModal } from './_EditReceiptModal';
+import { CreateReceiptModal } from './_CreateReceiptModal';
 
-interface ReceiptsTableProps {
-  receipts: ReceiptListItem[];
-  onUpdate: () => void;
+interface Props {
+  data: ReceiptListItem[];
+  totalRows: number;
+  searchParams: DataTableSearchParams;
 }
 
-export function ReceiptsTable({ receipts, onUpdate }: ReceiptsTableProps) {
+export function _ReceiptsTable({ data, totalRows, searchParams }: Props) {
+  const router = useRouter();
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -51,7 +45,7 @@ export function ReceiptsTable({ receipts, onUpdate }: ReceiptsTableProps) {
     try {
       await confirmReceipt(selectedReceiptId);
       toast.success('Recibo confirmado correctamente');
-      onUpdate();
+      router.refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Error al confirmar recibo');
     } finally {
@@ -68,7 +62,7 @@ export function ReceiptsTable({ receipts, onUpdate }: ReceiptsTableProps) {
     try {
       await deleteReceipt(selectedReceiptId);
       toast.success('Recibo eliminado correctamente');
-      onUpdate();
+      router.refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Error al eliminar recibo');
     } finally {
@@ -78,135 +72,39 @@ export function ReceiptsTable({ receipts, onUpdate }: ReceiptsTableProps) {
     }
   };
 
-  const columns: ColumnDef<ReceiptListItem>[] = [
-    {
-      accessorKey: 'fullNumber',
-      header: 'Número',
-      meta: { title: 'Número' },
-    },
-    {
-      accessorKey: 'date',
-      header: 'Fecha',
-      meta: { title: 'Fecha' },
-      cell: ({ row }) => moment(row.original.date).format('DD/MM/YYYY'),
-    },
-    {
-      accessorKey: 'customer',
-      header: 'Cliente',
-      meta: { title: 'Cliente' },
-      cell: ({ row }) => row.original.customer.name,
-    },
-    {
-      accessorKey: 'totalAmount',
-      header: 'Monto Total',
-      meta: { title: 'Monto Total' },
-      cell: ({ row }) => (
-        <span className="font-medium">
-          ${row.original.totalAmount.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </span>
-      ),
-    },
-    {
-      accessorKey: '_count.items',
-      header: 'Facturas',
-      meta: { title: 'Facturas' },
-      cell: ({ row }) => row.original._count.items,
-    },
-    {
-      accessorKey: '_count.payments',
-      header: 'Pagos',
-      meta: { title: 'Pagos' },
-      cell: ({ row }) => row.original._count.payments,
-    },
-    {
-      accessorKey: 'status',
-      header: 'Estado',
-      meta: { title: 'Estado' },
-      cell: ({ row }) => (
-        <Badge variant={RECEIPT_STATUS_BADGES[row.original.status]}>
-          {RECEIPT_STATUS_LABELS[row.original.status]}
-        </Badge>
-      ),
-    },
-    {
-      id: 'actions',
-      header: 'Acciones',
-      meta: { title: 'Acciones' },
-      cell: ({ row }) => {
-        const receipt = row.original;
-
-        return (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 p-0">
-                <span className="sr-only">Abrir menú</span>
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={() => {
-                  setSelectedReceiptId(receipt.id);
-                  setDetailModalOpen(true);
-                }}
-              >
-                <Eye className="mr-2 h-4 w-4" />
-                Ver Detalle
-              </DropdownMenuItem>
-
-              <DropdownMenuItem
-                onClick={() => {
-                  window.open(`/api/receipts/${receipt.id}/pdf`, '_blank');
-                }}
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Descargar PDF
-              </DropdownMenuItem>
-
-              {receipt.status === 'DRAFT' && (
-                <>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setSelectedReceiptId(receipt.id);
-                      setEditModalOpen(true);
-                    }}
-                  >
-                    <Edit className="mr-2 h-4 w-4" />
-                    Editar
-                  </DropdownMenuItem>
-
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setSelectedReceiptId(receipt.id);
-                      setConfirmDialogOpen(true);
-                    }}
-                  >
-                    <CheckCircle className="mr-2 h-4 w-4" />
-                    Confirmar Recibo
-                  </DropdownMenuItem>
-
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setSelectedReceiptId(receipt.id);
-                      setDeleteDialogOpen(true);
-                    }}
-                    className="text-destructive"
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Eliminar
-                  </DropdownMenuItem>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        );
-      },
-    },
-  ];
+  const columns = useMemo(
+    () =>
+      getColumns({
+        onViewDetail: (receipt) => {
+          setSelectedReceiptId(receipt.id);
+          setDetailModalOpen(true);
+        },
+        onEdit: (receipt) => {
+          setSelectedReceiptId(receipt.id);
+          setEditModalOpen(true);
+        },
+        onConfirm: (receipt) => {
+          setSelectedReceiptId(receipt.id);
+          setConfirmDialogOpen(true);
+        },
+        onDelete: (receipt) => {
+          setSelectedReceiptId(receipt.id);
+          setDeleteDialogOpen(true);
+        },
+      }),
+    []
+  );
 
   return (
     <>
-      <DataTable<ReceiptListItem> columns={columns} data={receipts} totalRows={receipts.length} />
+      <DataTable
+        columns={columns}
+        data={data}
+        totalRows={totalRows}
+        searchParams={searchParams}
+        searchPlaceholder="Buscar recibos..."
+        toolbarActions={<CreateReceiptModal onSuccess={() => router.refresh()} />}
+      />
 
       {/* Diálogo de Confirmación */}
       <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>

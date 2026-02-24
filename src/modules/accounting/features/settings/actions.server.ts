@@ -40,6 +40,16 @@ export async function saveAccountingSettings(
     vatCreditAccountId?: string | null;
     defaultCashAccountId?: string | null;
     defaultBankAccountId?: string | null;
+    expensesAccountId?: string | null;
+    resultAccountId?: string | null;
+    withholdingIvaEmittedAccountId?: string | null;
+    withholdingGananciasEmittedAccountId?: string | null;
+    withholdingIibbEmittedAccountId?: string | null;
+    withholdingSussEmittedAccountId?: string | null;
+    withholdingIvaSufferedAccountId?: string | null;
+    withholdingGananciasSufferedAccountId?: string | null;
+    withholdingIibbSufferedAccountId?: string | null;
+    withholdingSussSufferedAccountId?: string | null;
   }
 ) {
   const { userId } = await auth();

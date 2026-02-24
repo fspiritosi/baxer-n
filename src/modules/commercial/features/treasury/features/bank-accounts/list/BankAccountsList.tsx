@@ -1,14 +1,85 @@
-import { Suspense } from 'react';
+import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
+import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
+import { getBankAccounts, getBankAccountsPaginated } from './actions.server';
+import { _BankAccountsTable } from './components/_BankAccountsTable';
 
-import { getBankAccounts } from './actions.server';
-import { _BankAccountsListContent } from './components/_BankAccountsListContent';
+interface Props {
+  searchParams?: DataTableSearchParams;
+}
 
-export async function BankAccountsList() {
-  const bankAccounts = await getBankAccounts();
+export async function BankAccountsList({ searchParams = {} }: Props) {
+  const [allAccounts, paginatedResult] = await Promise.all([
+    getBankAccounts({ includeInactive: true }),
+    getBankAccountsPaginated(searchParams),
+  ]);
+
+  // Calcular KPIs desde todas las cuentas
+  const totalBalance = allAccounts.reduce((acc, account) => {
+    if (account.status === 'ACTIVE') {
+      return acc + account.balance;
+    }
+    return acc;
+  }, 0);
+
+  const activeCount = allAccounts.filter((a) => a.status === 'ACTIVE').length;
+  const totalMovements = allAccounts.reduce((acc, account) => acc + (account._count?.movements || 0), 0);
 
   return (
-    <Suspense fallback={<div>Cargando...</div>}>
-      <_BankAccountsListContent initialData={bankAccounts} />
-    </Suspense>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Cuentas Bancarias</h1>
+        <p className="text-muted-foreground">
+          Gestión de cuentas bancarias y movimientos
+        </p>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total en Bancos</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              ${totalBalance.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Cuentas activas
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Cuentas Activas</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{activeCount}</div>
+            <p className="text-xs text-muted-foreground">
+              De {allAccounts.length} totales
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Movimientos</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalMovements}</div>
+            <p className="text-xs text-muted-foreground">
+              Total registrados
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Table */}
+      <_BankAccountsTable
+        data={paginatedResult.data}
+        totalRows={paginatedResult.total}
+        searchParams={searchParams}
+      />
+    </div>
   );
 }

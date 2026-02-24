@@ -57,7 +57,7 @@ export async function createCashRegister(data: CashRegisterFormData) {
 
     revalidatePath('/dashboard/commercial/treasury/cash-registers');
 
-    return { success: true, data: cashRegister };
+    return { success: true, id: cashRegister.id };
   } catch (error) {
     logger.error('Error al crear caja', { data: { error } });
     if (error instanceof Error) {
@@ -127,7 +127,7 @@ export async function updateCashRegister(id: string, data: CashRegisterFormData)
 
     revalidatePath('/dashboard/commercial/treasury/cash-registers');
 
-    return { success: true, data: cashRegister };
+    return { success: true, id: cashRegister.id };
   } catch (error) {
     logger.error('Error al actualizar caja', { data: { error, id } });
     if (error instanceof Error) {

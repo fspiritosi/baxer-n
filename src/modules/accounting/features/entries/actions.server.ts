@@ -359,6 +359,18 @@ export async function getJournalEntries(companyId: string) {
         reversalEntry: {
           select: { number: true },
         },
+        salesInvoices: {
+          select: { id: true, fullNumber: true },
+        },
+        purchaseInvoices: {
+          select: { id: true, fullNumber: true },
+        },
+        receipts: {
+          select: { id: true, fullNumber: true },
+        },
+        paymentOrders: {
+          select: { id: true, fullNumber: true },
+        },
       },
     });
 

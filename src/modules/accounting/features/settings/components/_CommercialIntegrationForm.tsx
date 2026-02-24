@@ -30,6 +30,16 @@ const commercialIntegrationSchema = z.object({
   vatCreditAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
   defaultCashAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
   defaultBankAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
+  expensesAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
+  resultAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
+  withholdingIvaEmittedAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
+  withholdingGananciasEmittedAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
+  withholdingIibbEmittedAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
+  withholdingSussEmittedAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
+  withholdingIvaSufferedAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
+  withholdingGananciasSufferedAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
+  withholdingIibbSufferedAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
+  withholdingSussSufferedAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
 });
 
 type FormValues = z.infer<typeof commercialIntegrationSchema>;
@@ -153,6 +163,31 @@ export function _CommercialIntegrationForm({
             </Select>
             <p className="text-xs text-muted-foreground">
               Se usa al confirmar facturas de compra (Debe)
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="expensesAccountId">Cuenta de Gastos Operativos</Label>
+            <Select
+              value={form.watch('expensesAccountId') || undefined}
+              onValueChange={(value) => handleSelectChange('expensesAccountId', value)}
+              disabled={isLoading}
+            >
+              <SelectTrigger id="expensesAccountId">
+                <SelectValue placeholder="Seleccionar cuenta..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__clear__">Sin asignar</SelectItem>
+                {accounts
+                  .filter((acc) => acc.type === 'EXPENSE')
+                  .map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {formatAccountOption(account)}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Se usa al confirmar gastos operativos (Debe)
             </p>
           </div>
         </div>
@@ -328,6 +363,244 @@ export function _CommercialIntegrationForm({
             <p className="text-xs text-muted-foreground">
               Se usa si la cuenta bancaria no tiene cuenta específica asignada
             </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Cierre de Ejercicio */}
+      <div className="space-y-4">
+        <h3 className="text-sm font-medium text-muted-foreground">Cierre de Ejercicio</h3>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="resultAccountId">Cuenta de Resultado del Ejercicio</Label>
+            <Select
+              value={form.watch('resultAccountId') || undefined}
+              onValueChange={(value) => handleSelectChange('resultAccountId', value)}
+              disabled={isLoading}
+            >
+              <SelectTrigger id="resultAccountId">
+                <SelectValue placeholder="Seleccionar cuenta..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__clear__">Sin asignar</SelectItem>
+                {accounts
+                  .filter((acc) => acc.type === 'EQUITY')
+                  .map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {formatAccountOption(account)}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Cuenta de Patrimonio Neto donde se registra el resultado al cerrar el ejercicio fiscal
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Retenciones Emitidas */}
+      <div className="space-y-4">
+        <h3 className="text-sm font-medium text-muted-foreground">
+          Retenciones Emitidas (por Pagar a AFIP)
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          Cuentas de Pasivo donde se registran las retenciones que la empresa emite al pagar a proveedores
+        </p>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="withholdingIvaEmittedAccountId">Ret. IVA Emitida</Label>
+            <Select
+              value={form.watch('withholdingIvaEmittedAccountId') || undefined}
+              onValueChange={(value) => handleSelectChange('withholdingIvaEmittedAccountId', value)}
+              disabled={isLoading}
+            >
+              <SelectTrigger id="withholdingIvaEmittedAccountId">
+                <SelectValue placeholder="Seleccionar cuenta..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__clear__">Sin asignar</SelectItem>
+                {accounts
+                  .filter((acc) => acc.type === 'LIABILITY')
+                  .map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {formatAccountOption(account)}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="withholdingGananciasEmittedAccountId">Ret. Ganancias Emitida</Label>
+            <Select
+              value={form.watch('withholdingGananciasEmittedAccountId') || undefined}
+              onValueChange={(value) => handleSelectChange('withholdingGananciasEmittedAccountId', value)}
+              disabled={isLoading}
+            >
+              <SelectTrigger id="withholdingGananciasEmittedAccountId">
+                <SelectValue placeholder="Seleccionar cuenta..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__clear__">Sin asignar</SelectItem>
+                {accounts
+                  .filter((acc) => acc.type === 'LIABILITY')
+                  .map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {formatAccountOption(account)}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="withholdingIibbEmittedAccountId">Ret. IIBB Emitida</Label>
+            <Select
+              value={form.watch('withholdingIibbEmittedAccountId') || undefined}
+              onValueChange={(value) => handleSelectChange('withholdingIibbEmittedAccountId', value)}
+              disabled={isLoading}
+            >
+              <SelectTrigger id="withholdingIibbEmittedAccountId">
+                <SelectValue placeholder="Seleccionar cuenta..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__clear__">Sin asignar</SelectItem>
+                {accounts
+                  .filter((acc) => acc.type === 'LIABILITY')
+                  .map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {formatAccountOption(account)}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="withholdingSussEmittedAccountId">Ret. SUSS Emitida</Label>
+            <Select
+              value={form.watch('withholdingSussEmittedAccountId') || undefined}
+              onValueChange={(value) => handleSelectChange('withholdingSussEmittedAccountId', value)}
+              disabled={isLoading}
+            >
+              <SelectTrigger id="withholdingSussEmittedAccountId">
+                <SelectValue placeholder="Seleccionar cuenta..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__clear__">Sin asignar</SelectItem>
+                {accounts
+                  .filter((acc) => acc.type === 'LIABILITY')
+                  .map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {formatAccountOption(account)}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+
+      {/* Retenciones Sufridas */}
+      <div className="space-y-4">
+        <h3 className="text-sm font-medium text-muted-foreground">
+          Retenciones Sufridas (Crédito Fiscal)
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          Cuentas de Activo donde se registran las retenciones que los clientes aplican a la empresa
+        </p>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="withholdingIvaSufferedAccountId">Ret. IVA Sufrida</Label>
+            <Select
+              value={form.watch('withholdingIvaSufferedAccountId') || undefined}
+              onValueChange={(value) => handleSelectChange('withholdingIvaSufferedAccountId', value)}
+              disabled={isLoading}
+            >
+              <SelectTrigger id="withholdingIvaSufferedAccountId">
+                <SelectValue placeholder="Seleccionar cuenta..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__clear__">Sin asignar</SelectItem>
+                {accounts
+                  .filter((acc) => acc.type === 'ASSET')
+                  .map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {formatAccountOption(account)}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="withholdingGananciasSufferedAccountId">Ret. Ganancias Sufrida</Label>
+            <Select
+              value={form.watch('withholdingGananciasSufferedAccountId') || undefined}
+              onValueChange={(value) => handleSelectChange('withholdingGananciasSufferedAccountId', value)}
+              disabled={isLoading}
+            >
+              <SelectTrigger id="withholdingGananciasSufferedAccountId">
+                <SelectValue placeholder="Seleccionar cuenta..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__clear__">Sin asignar</SelectItem>
+                {accounts
+                  .filter((acc) => acc.type === 'ASSET')
+                  .map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {formatAccountOption(account)}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="withholdingIibbSufferedAccountId">Ret. IIBB Sufrida</Label>
+            <Select
+              value={form.watch('withholdingIibbSufferedAccountId') || undefined}
+              onValueChange={(value) => handleSelectChange('withholdingIibbSufferedAccountId', value)}
+              disabled={isLoading}
+            >
+              <SelectTrigger id="withholdingIibbSufferedAccountId">
+                <SelectValue placeholder="Seleccionar cuenta..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__clear__">Sin asignar</SelectItem>
+                {accounts
+                  .filter((acc) => acc.type === 'ASSET')
+                  .map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {formatAccountOption(account)}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="withholdingSussSufferedAccountId">Ret. SUSS Sufrida</Label>
+            <Select
+              value={form.watch('withholdingSussSufferedAccountId') || undefined}
+              onValueChange={(value) => handleSelectChange('withholdingSussSufferedAccountId', value)}
+              disabled={isLoading}
+            >
+              <SelectTrigger id="withholdingSussSufferedAccountId">
+                <SelectValue placeholder="Seleccionar cuenta..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__clear__">Sin asignar</SelectItem>
+                {accounts
+                  .filter((acc) => acc.type === 'ASSET')
+                  .map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {formatAccountOption(account)}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </div>

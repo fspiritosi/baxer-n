@@ -2,26 +2,20 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import moment from 'moment';
 import { toast } from 'sonner';
-import type { ColumnDef } from '@tanstack/react-table';
 import {
-  ArrowDown,
-  ArrowUp,
   CheckCircle2,
-  Circle,
   Clock,
   ListChecks,
   BarChart3,
 } from 'lucide-react';
 
-import { DataTable } from '@/shared/components/common/DataTable';
-import { Badge } from '@/shared/components/ui/badge';
+import { DataTable, type DataTableSearchParams } from '@/shared/components/common/DataTable';
 import { Button } from '@/shared/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
-import { Checkbox } from '@/shared/components/ui/checkbox';
-import { BANK_MOVEMENT_TYPE_LABELS } from '../../../../shared/validators';
 import { reconcileMultipleBankMovements } from '../../../bank-movements/actions.server';
+import { getReconciliationColumns } from '../columns';
+import { _LinkDocumentDialog } from './_LinkDocumentDialog';
 
 interface BankMovement extends Record<string, unknown> {
   id: string;
@@ -44,20 +38,19 @@ interface ReconciliationStats {
 }
 
 interface Props {
-  movements: BankMovement[];
-  bankAccountId: string;
+  data: BankMovement[];
+  totalRows: number;
+  searchParams: DataTableSearchParams;
   stats: ReconciliationStats;
+  bankAccountId: string;
 }
 
-export function _ReconciliationView({ movements, stats }: Props) {
+export function _ReconciliationView({ data, totalRows, searchParams, stats, bankAccountId }: Props) {
   const router = useRouter();
   const [selectedRows, setSelectedRows] = useState<BankMovement[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-
-  const pendingMovements = useMemo(
-    () => movements.filter((m) => !m.reconciled),
-    [movements]
-  );
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [movementToLink, setMovementToLink] = useState<BankMovement | null>(null);
 
   const handleBulkReconcile = async () => {
     const ids = selectedRows.map((r) => r.id);
@@ -76,107 +69,13 @@ export function _ReconciliationView({ movements, stats }: Props) {
     }
   };
 
-  const columns = useMemo<ColumnDef<BankMovement>[]>(
-    () => [
-      {
-        id: 'select',
-        header: ({ table }) => (
-          <Checkbox
-            checked={
-              table.getIsAllPageRowsSelected() ||
-              (table.getIsSomePageRowsSelected() && 'indeterminate')
-            }
-            onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-            aria-label="Seleccionar todos"
-          />
-        ),
-        cell: ({ row }) => (
-          <Checkbox
-            checked={row.getIsSelected()}
-            onCheckedChange={(value) => row.toggleSelected(!!value)}
-            aria-label="Seleccionar fila"
-          />
-        ),
-        enableSorting: false,
-        enableHiding: false,
-      },
-      {
-        accessorKey: 'date',
-        header: 'Fecha',
-        meta: { title: 'Fecha' },
-        cell: ({ row }) => (
-          <div className="flex flex-col">
-            <span className="font-medium">
-              {moment(row.original.date).format('DD/MM/YYYY')}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {moment(row.original.date).format('HH:mm')}
-            </span>
-          </div>
-        ),
-      },
-      {
-        accessorKey: 'type',
-        header: 'Tipo',
-        meta: { title: 'Tipo' },
-        cell: ({ row }) => {
-          const type = row.original.type;
-          const isIncome = ['DEPOSIT', 'TRANSFER_IN', 'INTEREST'].includes(type);
+  const handleOpenLinkDialog = (movement: BankMovement) => {
+    setMovementToLink(movement);
+    setLinkDialogOpen(true);
+  };
 
-          return (
-            <div className="flex items-center gap-2">
-              {isIncome ? (
-                <ArrowDown className="h-4 w-4 text-green-600" />
-              ) : (
-                <ArrowUp className="h-4 w-4 text-red-600" />
-              )}
-              <Badge variant="outline">
-                {BANK_MOVEMENT_TYPE_LABELS[type as keyof typeof BANK_MOVEMENT_TYPE_LABELS] || type}
-              </Badge>
-            </div>
-          );
-        },
-      },
-      {
-        accessorKey: 'description',
-        header: 'Descripción',
-        meta: { title: 'Descripción' },
-        cell: ({ row }) => (
-          <div className="max-w-[300px]">
-            <p className="truncate">{row.original.description}</p>
-            {row.original.reference && (
-              <p className="text-xs text-muted-foreground">
-                Ref: {row.original.reference}
-              </p>
-            )}
-            {row.original.statementNumber && (
-              <p className="text-xs text-muted-foreground">
-                Extracto: {row.original.statementNumber}
-              </p>
-            )}
-          </div>
-        ),
-      },
-      {
-        accessorKey: 'amount',
-        header: 'Monto',
-        meta: { title: 'Monto' },
-        cell: ({ row }) => {
-          const type = row.original.type;
-          const amount = row.original.amount;
-          const isIncome = ['DEPOSIT', 'TRANSFER_IN', 'INTEREST'].includes(type);
-
-          return (
-            <div className={`text-right font-semibold ${isIncome ? 'text-green-600' : 'text-red-600'}`}>
-              {isIncome ? '+' : '-'}${Math.abs(amount).toLocaleString('es-AR', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
-            </div>
-          );
-        },
-      },
-    ],
+  const columns = useMemo(
+    () => getReconciliationColumns({ onLink: handleOpenLinkDialog }),
     []
   );
 
@@ -246,13 +145,13 @@ export function _ReconciliationView({ movements, stats }: Props) {
             <div>
               <CardTitle>Movimientos Pendientes</CardTitle>
               <CardDescription>
-                Selecciona los movimientos que deseas conciliar
+                Selecciona los movimientos que deseas conciliar o vincúlalos a un documento
               </CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          {pendingMovements.length === 0 ? (
+          {totalRows === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <CheckCircle2 className="h-12 w-12 text-green-600 mb-4" />
               <h3 className="text-lg font-semibold">Todo conciliado</h3>
@@ -263,9 +162,10 @@ export function _ReconciliationView({ movements, stats }: Props) {
           ) : (
             <DataTable<BankMovement>
               columns={columns}
-              data={pendingMovements}
-              totalRows={pendingMovements.length}
-              searchPlaceholder="Buscar pendientes..."
+              data={data}
+              totalRows={totalRows}
+              searchParams={searchParams}
+              showSearch={false}
               enableRowSelection
               showRowSelection
               onRowSelectionChange={setSelectedRows}
@@ -274,6 +174,14 @@ export function _ReconciliationView({ movements, stats }: Props) {
           )}
         </CardContent>
       </Card>
+
+      {/* Dialog para vincular movimiento */}
+      <_LinkDocumentDialog
+        open={linkDialogOpen}
+        onOpenChange={setLinkDialogOpen}
+        movement={movementToLink}
+        bankAccountId={bankAccountId}
+      />
     </div>
   );
 }

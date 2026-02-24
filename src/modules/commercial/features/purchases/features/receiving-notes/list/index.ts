@@ -1,0 +1,1 @@
+export { ReceivingNotesList } from './ReceivingNotesList';

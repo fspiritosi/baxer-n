@@ -1,11 +1,16 @@
+import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
 import { Button } from '@/shared/components/ui/button';
 import { Plus } from 'lucide-react';
 import Link from 'next/link';
-import { getInvoices } from './actions.server';
-import { InvoicesTable } from './components/_InvoicesTable';
+import { getInvoicesPaginated } from './actions.server';
+import { _InvoicesTable } from './components/_InvoicesTable';
 
-export async function InvoicesList() {
-  const invoices = await getInvoices();
+interface Props {
+  searchParams?: DataTableSearchParams;
+}
+
+export async function InvoicesList({ searchParams = {} }: Props) {
+  const paginatedResult = await getInvoicesPaginated(searchParams);
 
   return (
     <div className="space-y-4">
@@ -24,7 +29,11 @@ export async function InvoicesList() {
         </Button>
       </div>
 
-      <InvoicesTable data={invoices} />
+      <_InvoicesTable
+        data={paginatedResult.data}
+        totalRows={paginatedResult.total}
+        searchParams={searchParams}
+      />
     </div>
   );
 }

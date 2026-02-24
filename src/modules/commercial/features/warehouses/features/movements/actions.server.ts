@@ -209,7 +209,7 @@ export async function createStockAdjustment(data: unknown) {
 
     revalidatePath('/dashboard/commercial/stock');
     revalidatePath('/dashboard/commercial/movements');
-    return result;
+    return { success: true };
   } catch (error) {
     logger.error('Error al crear ajuste de stock', {
       data: { companyId, error },
@@ -400,7 +400,7 @@ export async function createStockTransfer(data: unknown) {
 
     revalidatePath('/dashboard/commercial/stock');
     revalidatePath('/dashboard/commercial/movements');
-    return result;
+    return { success: true };
   } catch (error) {
     logger.error('Error al crear transferencia de stock', {
       data: { companyId, error },

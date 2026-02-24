@@ -108,7 +108,7 @@ export async function openCashSession(data: OpenSessionFormData) {
 
     revalidatePath('/dashboard/commercial/treasury/cash-registers');
 
-    return { success: true, data: session };
+    return { success: true, id: session.id };
   } catch (error) {
     logger.error('Error al abrir sesión de caja', { data: { error } });
     if (error instanceof Error) {
@@ -221,7 +221,7 @@ export async function closeCashSession(data: CloseSessionFormData) {
 
     revalidatePath('/dashboard/commercial/treasury/cash-registers');
 
-    return { success: true, data: closedSession };
+    return { success: true, id: closedSession.id };
   } catch (error) {
     logger.error('Error al cerrar sesión de caja', { data: { error } });
     if (error instanceof Error) {

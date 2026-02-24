@@ -86,5 +86,10 @@ export async function getActiveProducts() {
     },
   });
 
-  return products;
+  return products.map((p) => ({
+    ...p,
+    salePrice: Number(p.salePrice),
+    salePriceWithTax: Number(p.salePriceWithTax),
+    vatRate: Number(p.vatRate),
+  }));
 }

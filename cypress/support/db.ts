@@ -119,6 +119,226 @@ export async function getTestCompanyId(userId: string): Promise<string | null> {
 }
 
 /**
+ * Clean up test products
+ */
+export async function cleanupTestProducts(companyId: string): Promise<number> {
+  const client = await getPool().connect();
+  try {
+    await client.query(
+      `DELETE FROM warehouse_stocks
+       WHERE product_id IN (
+         SELECT id FROM products WHERE company_id = $1 AND (name LIKE 'Test %' OR name LIKE 'Updated Product%')
+       )`,
+      [companyId]
+    );
+    const result = await client.query(
+      `DELETE FROM products
+       WHERE company_id = $1
+       AND (name LIKE 'Test %' OR name LIKE 'Updated Product%')
+       RETURNING id`,
+      [companyId]
+    );
+    return result.rowCount || 0;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Clean up test suppliers
+ */
+export async function cleanupTestSuppliers(companyId: string): Promise<number> {
+  const client = await getPool().connect();
+  try {
+    const result = await client.query(
+      `DELETE FROM suppliers
+       WHERE company_id = $1
+       AND (business_name LIKE 'Test %' OR business_name LIKE 'Updated Supplier%')
+       RETURNING id`,
+      [companyId]
+    );
+    return result.rowCount || 0;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Clean up test sales invoices
+ */
+export async function cleanupTestSalesInvoices(companyId: string): Promise<number> {
+  const client = await getPool().connect();
+  try {
+    await client.query(
+      `DELETE FROM sales_invoice_items
+       WHERE sales_invoice_id IN (
+         SELECT id FROM sales_invoices WHERE company_id = $1 AND notes LIKE '%test E2E%'
+       )`,
+      [companyId]
+    );
+    const result = await client.query(
+      `DELETE FROM sales_invoices
+       WHERE company_id = $1
+       AND notes LIKE '%test E2E%'
+       RETURNING id`,
+      [companyId]
+    );
+    return result.rowCount || 0;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Clean up test purchase invoices
+ */
+export async function cleanupTestPurchaseInvoices(companyId: string): Promise<number> {
+  const client = await getPool().connect();
+  try {
+    await client.query(
+      `DELETE FROM purchase_invoice_items
+       WHERE purchase_invoice_id IN (
+         SELECT id FROM purchase_invoices WHERE company_id = $1 AND notes LIKE '%test E2E%'
+       )`,
+      [companyId]
+    );
+    const result = await client.query(
+      `DELETE FROM purchase_invoices
+       WHERE company_id = $1
+       AND notes LIKE '%test E2E%'
+       RETURNING id`,
+      [companyId]
+    );
+    return result.rowCount || 0;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Clean up test bank accounts
+ */
+export async function cleanupTestBankAccounts(companyId: string): Promise<number> {
+  const client = await getPool().connect();
+  try {
+    await client.query(
+      `DELETE FROM bank_movements
+       WHERE bank_account_id IN (
+         SELECT id FROM bank_accounts WHERE company_id = $1 AND name LIKE 'Test %'
+       )`,
+      [companyId]
+    );
+    const result = await client.query(
+      `DELETE FROM bank_accounts
+       WHERE company_id = $1
+       AND name LIKE 'Test %'
+       RETURNING id`,
+      [companyId]
+    );
+    return result.rowCount || 0;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Clean up test expenses
+ */
+export async function cleanupTestExpenses(companyId: string): Promise<number> {
+  const client = await getPool().connect();
+  try {
+    const result = await client.query(
+      `DELETE FROM expenses
+       WHERE company_id = $1
+       AND description LIKE '%test E2E%'
+       RETURNING id`,
+      [companyId]
+    );
+    return result.rowCount || 0;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Clean up test warehouses
+ */
+export async function cleanupTestWarehouses(companyId: string): Promise<number> {
+  const client = await getPool().connect();
+  try {
+    const result = await client.query(
+      `DELETE FROM warehouses
+       WHERE company_id = $1
+       AND name LIKE 'Test %'
+       RETURNING id`,
+      [companyId]
+    );
+    return result.rowCount || 0;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Clean up test purchase orders
+ */
+export async function cleanupTestPurchaseOrders(companyId: string): Promise<number> {
+  const client = await getPool().connect();
+  try {
+    await client.query(
+      `DELETE FROM purchase_order_installments
+       WHERE order_id IN (
+         SELECT id FROM purchase_orders WHERE company_id = $1 AND notes LIKE '%test E2E%'
+       )`,
+      [companyId]
+    );
+    await client.query(
+      `DELETE FROM purchase_order_lines
+       WHERE order_id IN (
+         SELECT id FROM purchase_orders WHERE company_id = $1 AND notes LIKE '%test E2E%'
+       )`,
+      [companyId]
+    );
+    const result = await client.query(
+      `DELETE FROM purchase_orders
+       WHERE company_id = $1
+       AND notes LIKE '%test E2E%'
+       RETURNING id`,
+      [companyId]
+    );
+    return result.rowCount || 0;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Clean up test receiving notes
+ */
+export async function cleanupTestReceivingNotes(companyId: string): Promise<number> {
+  const client = await getPool().connect();
+  try {
+    await client.query(
+      `DELETE FROM receiving_note_lines
+       WHERE receiving_note_id IN (
+         SELECT id FROM receiving_notes WHERE company_id = $1 AND notes LIKE '%test E2E%'
+       )`,
+      [companyId]
+    );
+    const result = await client.query(
+      `DELETE FROM receiving_notes
+       WHERE company_id = $1
+       AND notes LIKE '%test E2E%'
+       RETURNING id`,
+      [companyId]
+    );
+    return result.rowCount || 0;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Clean up all test data for a company
  */
 export async function cleanupAllTestData(companyId: string): Promise<{

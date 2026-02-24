@@ -4,6 +4,7 @@ import { getActiveCompanyId } from '@/shared/lib/company';
 import { logger } from '@/shared/lib/logger';
 import { prisma } from '@/shared/lib/prisma';
 import { getPresignedDownloadUrl } from '@/shared/lib/storage';
+import { isCreditNote } from '@/modules/commercial/shared/voucher-utils';
 import { revalidatePath } from 'next/cache';
 
 // Select optimizado para relaciones
@@ -332,7 +333,7 @@ export async function getClientAccountStatement(clientId: string) {
       where: {
         customerId: clientId,
         companyId,
-        status: 'CONFIRMED', // Solo facturas confirmadas
+        status: { in: ['CONFIRMED', 'PAID', 'PARTIAL_PAID'] },
       },
       select: {
         id: true,
@@ -356,6 +357,35 @@ export async function getClientAccountStatement(clientId: string) {
                 date: true,
               },
             },
+          },
+        },
+        creditNoteApplicationsReceived: {
+          select: {
+            amount: true,
+            creditNoteId: true,
+            creditNote: {
+              select: {
+                fullNumber: true,
+              },
+            },
+          },
+        },
+        creditNoteApplicationsGiven: {
+          select: {
+            amount: true,
+            invoice: {
+              select: {
+                fullNumber: true,
+              },
+            },
+          },
+        },
+        creditDebitNotes: {
+          select: {
+            id: true,
+            voucherType: true,
+            total: true,
+            status: true,
           },
         },
       },
@@ -386,17 +416,61 @@ export async function getClientAccountStatement(clientId: string) {
             },
           },
         },
+        withholdings: {
+          select: {
+            amount: true,
+            taxType: true,
+          },
+        },
       },
       orderBy: { date: 'desc' },
     });
 
     // Calcular saldos
     const invoicesWithBalance = salesInvoices.map((invoice) => {
+      const isNC = isCreditNote(invoice.voucherType);
       const totalCollected = invoice.receiptItems.reduce(
         (sum, item) => sum + Number(item.amount),
         0
       );
-      const balance = Number(invoice.total) - totalCollected;
+
+      // NC aplicadas explícitamente (tabla SalesCreditNoteApplication)
+      const cnAppliedToThisExplicit = invoice.creditNoteApplicationsReceived.reduce(
+        (sum, app) => sum + Number(app.amount),
+        0
+      );
+
+      // Fallback: NC vinculadas por originalInvoiceId sin registro explícito
+      // Capear para que collected no supere el total de la factura
+      const explicitCNIds = new Set(
+        invoice.creditNoteApplicationsReceived.map((app) => app.creditNoteId)
+      );
+      const cnLinkedRaw = !isNC
+        ? invoice.creditDebitNotes
+            .filter(
+              (doc) =>
+                isCreditNote(doc.voucherType) &&
+                doc.status !== 'DRAFT' &&
+                doc.status !== 'CANCELLED' &&
+                !explicitCNIds.has(doc.id)
+            )
+            .reduce((sum, doc) => sum + Number(doc.total), 0)
+        : 0;
+      const maxFallbackNC = Math.max(0, Number(invoice.total) - totalCollected - cnAppliedToThisExplicit);
+      const cnLinkedToThis = Math.min(cnLinkedRaw, maxFallbackNC);
+
+      const cnAppliedToThis = cnAppliedToThisExplicit + cnLinkedToThis;
+
+      const cnAppliedFromThis = invoice.creditNoteApplicationsGiven.reduce(
+        (sum, app) => sum + Number(app.amount),
+        0
+      );
+
+      // NC: saldo restante no aplicado (negativo = crédito disponible)
+      // Factura/ND: balance = total - cobrado - NC aplicadas
+      const balance = isNC
+        ? -(Number(invoice.total) - cnAppliedFromThis)
+        : Number(invoice.total) - totalCollected - cnAppliedToThis;
 
       return {
         id: invoice.id,
@@ -405,7 +479,7 @@ export async function getClientAccountStatement(clientId: string) {
         issueDate: invoice.issueDate,
         dueDate: invoice.dueDate,
         total: Number(invoice.total),
-        collected: totalCollected,
+        collected: isNC ? cnAppliedFromThis : totalCollected + cnAppliedToThis,
         balance,
         status: invoice.status,
         receipts: invoice.receiptItems.map((item) => ({
@@ -422,6 +496,7 @@ export async function getClientAccountStatement(clientId: string) {
       date: receipt.date,
       totalAmount: Number(receipt.totalAmount),
       status: receipt.status,
+      withholdingsTotal: receipt.withholdings.reduce((sum, w) => sum + Number(w.amount), 0),
       invoices: receipt.items.map((item) => ({
         amount: Number(item.amount),
         invoiceNumber: item.invoice.fullNumber,
@@ -429,9 +504,13 @@ export async function getClientAccountStatement(clientId: string) {
       })),
     }));
 
-    // Calcular totales
-    const totalInvoiced = invoicesWithBalance.reduce((sum, inv) => sum + inv.total, 0);
-    const totalCollected = invoicesWithBalance.reduce((sum, inv) => sum + inv.collected, 0);
+    // Calcular totales: Facturado (Facturas + ND), Cobrado (Recibos + NC aplicadas), Saldo
+    const totalInvoiced = invoicesWithBalance
+      .filter((inv) => !isCreditNote(inv.voucherType))
+      .reduce((sum, inv) => sum + inv.total, 0);
+    const totalCollected = invoicesWithBalance
+      .filter((inv) => !isCreditNote(inv.voucherType))
+      .reduce((sum, inv) => sum + inv.collected, 0);
     const totalBalance = totalInvoiced - totalCollected;
 
     logger.info('Cuenta corriente de cliente obtenida', {

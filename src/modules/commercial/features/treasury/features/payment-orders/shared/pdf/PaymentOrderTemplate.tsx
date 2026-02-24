@@ -6,6 +6,7 @@ import React from 'react';
 import { Document, Page, Text, View } from '@react-pdf/renderer';
 import { styles } from './styles';
 import type { PaymentOrderPDFData } from './types';
+import { LinkedDocumentsSection } from '@/modules/commercial/shared/pdf/LinkedDocumentsSection';
 import moment from 'moment';
 
 interface PaymentOrderTemplateProps {
@@ -13,7 +14,7 @@ interface PaymentOrderTemplateProps {
 }
 
 export function PaymentOrderTemplate({ data }: PaymentOrderTemplateProps) {
-  const { company, paymentOrder, supplier, invoices, payments, totalAmount, notes } = data;
+  const { company, paymentOrder, supplier, invoices, payments, totalAmount, notes, linkedDocuments } = data;
 
   return (
     <Document>
@@ -145,6 +146,9 @@ export function PaymentOrderTemplate({ data }: PaymentOrderTemplateProps) {
             <Text style={styles.notesText}>{notes}</Text>
           </View>
         )}
+
+        {/* DOCUMENTOS VINCULADOS */}
+        {linkedDocuments && <LinkedDocumentsSection data={linkedDocuments} />}
 
         {/* FOOTER */}
         <View style={styles.footer}>

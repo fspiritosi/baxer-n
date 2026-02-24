@@ -97,6 +97,16 @@ const navMain: NavItemWithSub[] = [
         href: '/dashboard/company/accounting/reports',
         module: 'accounting.reports',
       },
+      {
+        title: 'Cierre Ejercicio',
+        href: '/dashboard/company/accounting/fiscal-year-close',
+        module: 'accounting.fiscal-year-close',
+      },
+      {
+        title: 'Recurrentes',
+        href: '/dashboard/company/accounting/recurring-entries',
+        module: 'accounting.recurring-entries',
+      },
     ],
   },
   {
@@ -155,14 +165,29 @@ const navMain: NavItemWithSub[] = [
             module: 'commercial.suppliers',
           },
           {
+            title: 'Órdenes de Compra',
+            href: '/dashboard/commercial/purchase-orders',
+            module: 'commercial.purchase-orders',
+          },
+          {
             title: 'Facturas de Compra',
             href: '/dashboard/commercial/purchases',
             module: 'commercial.purchases',
           },
           {
+            title: 'Remitos de Recepción',
+            href: '/dashboard/commercial/receiving-notes',
+            module: 'commercial.receiving-notes',
+          },
+          {
             title: 'Reportes de Compras',
             href: '/dashboard/commercial/purchase-reports',
             module: 'commercial',
+          },
+          {
+            title: 'Gastos',
+            href: '/dashboard/commercial/expenses',
+            module: 'commercial.expenses',
           },
         ],
       },
@@ -170,6 +195,11 @@ const navMain: NavItemWithSub[] = [
         title: 'Tesorería',
         icon: Wallet,
         items: [
+          {
+            title: 'Flujo de Caja',
+            href: '/dashboard/commercial/treasury/cashflow',
+            module: 'commercial.treasury.cashflow',
+          },
           {
             title: 'Cajas',
             href: '/dashboard/commercial/treasury/cash-registers',
@@ -181,6 +211,11 @@ const navMain: NavItemWithSub[] = [
             module: 'commercial.treasury.bank-accounts',
           },
           {
+            title: 'Cheques',
+            href: '/dashboard/commercial/treasury/checks',
+            module: 'commercial.treasury.checks',
+          },
+          {
             title: 'Recibos de Cobro',
             href: '/dashboard/commercial/treasury/receipts',
             module: 'commercial.treasury.receipts',
@@ -189,6 +224,11 @@ const navMain: NavItemWithSub[] = [
             title: 'Órdenes de Pago',
             href: '/dashboard/commercial/treasury/payment-orders',
             module: 'commercial.treasury.payment-orders',
+          },
+          {
+            title: 'Proyecciones',
+            href: '/dashboard/commercial/treasury/projections',
+            module: 'commercial.treasury.projections',
           },
         ],
       },
@@ -389,7 +429,7 @@ const getNavConfig = (isSingleMode: boolean, activeCompanyId?: string): NavItemW
 
 // Navegación secundaria
 const navSecondary: NavItem[] = [
-  { title: 'Ayuda', href: '/dashboard/help', icon: HelpCircle, disabled: true },
+  { title: 'Ayuda', href: '/dashboard/help', icon: HelpCircle },
   { title: 'Buscar', href: '/dashboard/search', icon: Search, disabled: true },
 ];
 

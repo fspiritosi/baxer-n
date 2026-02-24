@@ -1,6 +1,6 @@
 'use client';
 
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -23,7 +23,8 @@ import {
 import { Input } from '@/shared/components/ui/input';
 import { Textarea } from '@/shared/components/ui/textarea';
 import { Plus, Trash2 } from 'lucide-react';
-import { createInvoice, updateInvoice, getAllowedVoucherTypesForCustomer } from '../../list/actions.server';
+import { createInvoice, updateInvoice, getAllowedVoucherTypesForCustomer, getCustomerInvoicesForSelect } from '../../list/actions.server';
+import { isCreditNote, isDebitNote } from '@/modules/commercial/shared/voucher-utils';
 import { invoiceFormSchema, VOUCHER_TYPE_LABELS } from '../../shared/validators';
 import { z } from 'zod';
 import moment from 'moment';
@@ -33,6 +34,29 @@ import { Separator } from '@/shared/components/ui/separator';
 import type { VoucherType } from '@/generated/prisma/enums';
 
 type FormInput = z.infer<typeof invoiceFormSchema>;
+
+const formatCurrency = (value: number) =>
+  `$${value.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+function _LineTotals({ form, index }: { form: ReturnType<typeof useForm<FormInput>>; index: number }) {
+  const line = useWatch({ control: form.control, name: `lines.${index}` });
+
+  const qty = parseFloat(line?.quantity ?? '0');
+  const price = parseFloat(line?.unitPrice ?? '0');
+  const vat = parseFloat(line?.vatRate ?? '0');
+
+  const neto = isNaN(qty) || isNaN(price) ? 0 : Math.round(qty * price * 100) / 100;
+  const iva = isNaN(vat) ? 0 : Math.round(neto * (vat / 100) * 100) / 100;
+  const total = Math.round((neto + iva) * 100) / 100;
+
+  return (
+    <div className="flex justify-end gap-4 text-sm text-muted-foreground font-mono pt-1">
+      <span>Neto: {formatCurrency(neto)}</span>
+      <span>IVA: {formatCurrency(iva)}</span>
+      <span className="font-semibold text-foreground">Total: {formatCurrency(total)}</span>
+    </div>
+  );
+}
 
 interface InvoiceFormProps {
   customers: Array<{ id: string; name: string; taxId: string | null; email: string | null }>;
@@ -64,6 +88,8 @@ export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create'
   const [totals, setTotals] = useState({ subtotal: 0, vatAmount: 0, total: 0 });
   const [allowedVoucherTypes, setAllowedVoucherTypes] = useState<VoucherType[] | null>(null);
   const [loadingVoucherTypes, setLoadingVoucherTypes] = useState(false);
+  const [originalInvoices, setOriginalInvoices] = useState<Awaited<ReturnType<typeof getCustomerInvoicesForSelect>>>([]);
+  const [loadingOriginalInvoices, setLoadingOriginalInvoices] = useState(false);
 
   const form = useForm<FormInput>({
     resolver: zodResolver(invoiceFormSchema),
@@ -71,6 +97,7 @@ export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create'
       customerId: '',
       pointOfSaleId: '',
       voucherType: 'FACTURA_B',
+      originalInvoiceId: '',
       issueDate: new Date(),
       dueDate: undefined,
       notes: '',
@@ -149,6 +176,33 @@ export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create'
 
     fetchAllowedTypes();
   }, [form.watch('customerId')]);
+
+  // Cargar facturas originales cuando se selecciona NC/ND
+  const watchedVoucherType = form.watch('voucherType');
+  const watchedCustomerId = form.watch('customerId');
+  const showOriginalInvoice = watchedVoucherType && (isCreditNote(watchedVoucherType) || isDebitNote(watchedVoucherType));
+
+  useEffect(() => {
+    if (!showOriginalInvoice || !watchedCustomerId) {
+      setOriginalInvoices([]);
+      form.setValue('originalInvoiceId', '');
+      return;
+    }
+
+    const fetchInvoices = async () => {
+      setLoadingOriginalInvoices(true);
+      try {
+        const invoices = await getCustomerInvoicesForSelect(watchedCustomerId);
+        setOriginalInvoices(invoices);
+      } catch {
+        setOriginalInvoices([]);
+      } finally {
+        setLoadingOriginalInvoices(false);
+      }
+    };
+
+    fetchInvoices();
+  }, [showOriginalInvoice, watchedCustomerId]);
 
   const handleAddLine = () => {
     append({
@@ -295,6 +349,46 @@ export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create'
                 </FormItem>
               )}
             />
+
+            {showOriginalInvoice && (
+              <FormField
+                control={form.control}
+                name="originalInvoiceId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Factura Original (opcional)</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value || ''}
+                      disabled={loadingOriginalInvoices}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue
+                            placeholder={
+                              loadingOriginalInvoices
+                                ? 'Cargando facturas...'
+                                : 'Seleccionar factura original'
+                            }
+                          />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {originalInvoices.map((inv) => (
+                          <SelectItem key={inv.id} value={inv.id}>
+                            {inv.fullNumber} - ${inv.total.toLocaleString('es-AR', { minimumFractionDigits: 2 })} - {moment(inv.issueDate).format('DD/MM/YYYY')}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-sm text-muted-foreground">
+                      Vincula esta {isCreditNote(watchedVoucherType) ? 'nota de crédito' : 'nota de débito'} a una factura existente
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <FormField
               control={form.control}
@@ -457,6 +551,8 @@ export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create'
                     </FormItem>
                   )}
                 />
+
+                <_LineTotals form={form} index={index} />
               </div>
             ))}
 

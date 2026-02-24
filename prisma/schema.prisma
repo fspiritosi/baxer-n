@@ -138,6 +138,8 @@ model Company {
   salesPointsOfSale SalesPointOfSale[]
   salesInvoices     SalesInvoice[]
   purchaseInvoices  PurchaseInvoice[]
+  purchaseOrders    PurchaseOrder[]
+  purchaseOrderInstallments PurchaseOrderInstallment[]
 
   // Módulo Tesorería
   cashRegisters         CashRegister[]
@@ -152,6 +154,21 @@ model Company {
   accounts            Account[]
   journalEntries     JournalEntry[]
   accountingSettings AccountingSettings?
+  recurringEntries   RecurringEntry[]
+  salesCreditNoteApplications     SalesCreditNoteApplication[]
+  purchaseCreditNoteApplications  PurchaseCreditNoteApplication[]
+
+  // Módulo Gastos
+  expenseCategories  ExpenseCategory[]
+  expenses           Expense[]
+
+  // Cheques y Proyecciones
+  checks              Check[]
+  cashflowProjections CashflowProjection[]
+  projectionDocumentLinks ProjectionDocumentLink[]
+
+  // Remitos de Recepcion
+  receivingNotes      ReceivingNote[]
 
   @@map("companies")
 }
@@ -188,6 +205,17 @@ enum JournalEntryStatus {
   @@map("journal_entry_status")
 }
 
+// Frecuencia de Asientos Recurrentes
+enum RecurringFrequency {
+  MONTHLY       // Mensual
+  BIMONTHLY     // Bimestral
+  QUARTERLY     // Trimestral
+  SEMIANNUAL    // Semestral
+  ANNUAL        // Anual
+
+  @@map("recurring_frequency")
+}
+
 // Plan de Cuentas
 model Account {
   id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -219,6 +247,17 @@ model Account {
   settingsAsVatCreditAccount    AccountingSettings[] @relation("VatCreditAccount")
   settingsAsDefaultCashAccount  AccountingSettings[] @relation("DefaultCashAccount")
   settingsAsDefaultBankAccount  AccountingSettings[] @relation("DefaultBankAccount")
+  settingsAsExpensesAccount     AccountingSettings[] @relation("ExpensesAccount")
+  settingsAsResultAccount       AccountingSettings[] @relation("ResultAccount")
+  settingsAsWhIvaEmitted        AccountingSettings[] @relation("WhIvaEmittedAccount")
+  settingsAsWhGananciasEmitted  AccountingSettings[] @relation("WhGananciasEmittedAccount")
+  settingsAsWhIibbEmitted       AccountingSettings[] @relation("WhIibbEmittedAccount")
+  settingsAsWhSussEmitted       AccountingSettings[] @relation("WhSussEmittedAccount")
+  settingsAsWhIvaSuffered       AccountingSettings[] @relation("WhIvaSufferedAccount")
+  settingsAsWhGananciasSuffered AccountingSettings[] @relation("WhGananciasSufferedAccount")
+  settingsAsWhIibbSuffered      AccountingSettings[] @relation("WhIibbSufferedAccount")
+  settingsAsWhSussSuffered      AccountingSettings[] @relation("WhSussSufferedAccount")
+  recurringEntryLines           RecurringEntryLine[]
 
   @@unique([companyId, code])
   @@map("accounts")
@@ -246,6 +285,7 @@ model JournalEntry {
   purchaseInvoices PurchaseInvoice[]
   receipts        Receipt[]
   paymentOrders   PaymentOrder[]
+  expenses        Expense[]
   createdBy       String              @map("created_by") // userId
   createdAt       DateTime            @default(now()) @map("created_at")
   updatedAt       DateTime            @updatedAt @map("updated_at")
@@ -292,6 +332,24 @@ model AccountingSettings {
   defaultCashAccountId    String? @map("default_cash_account_id") @db.Uuid   // Caja por defecto
   defaultBankAccountId    String? @map("default_bank_account_id") @db.Uuid   // Banco por defecto
 
+  // Cuenta de gastos operativos (para módulo de gastos)
+  expensesAccountId       String? @map("expenses_account_id") @db.Uuid      // Gastos operativos
+
+  // Cuenta de resultado del ejercicio (para cierre fiscal)
+  resultAccountId         String? @map("result_account_id") @db.Uuid        // Resultado del Ejercicio (patrimonio)
+
+  // Cuentas de Retenciones - Emitidas (pasivo, por pagar a AFIP)
+  withholdingIvaEmittedAccountId        String? @map("withholding_iva_emitted_account_id") @db.Uuid
+  withholdingGananciasEmittedAccountId  String? @map("withholding_ganancias_emitted_account_id") @db.Uuid
+  withholdingIibbEmittedAccountId       String? @map("withholding_iibb_emitted_account_id") @db.Uuid
+  withholdingSussEmittedAccountId       String? @map("withholding_suss_emitted_account_id") @db.Uuid
+
+  // Cuentas de Retenciones - Sufridas (activo, crédito fiscal)
+  withholdingIvaSufferedAccountId       String? @map("withholding_iva_suffered_account_id") @db.Uuid
+  withholdingGananciasSufferedAccountId String? @map("withholding_ganancias_suffered_account_id") @db.Uuid
+  withholdingIibbSufferedAccountId      String? @map("withholding_iibb_suffered_account_id") @db.Uuid
+  withholdingSussSufferedAccountId      String? @map("withholding_suss_suffered_account_id") @db.Uuid
+
   company                 Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   salesAccount            Account?        @relation("SalesAccount", fields: [salesAccountId], references: [id])
   purchasesAccount        Account?        @relation("PurchasesAccount", fields: [purchasesAccountId], references: [id])
@@ -301,6 +359,18 @@ model AccountingSettings {
   vatCreditAccount        Account?        @relation("VatCreditAccount", fields: [vatCreditAccountId], references: [id])
   defaultCashAccount      Account?        @relation("DefaultCashAccount", fields: [defaultCashAccountId], references: [id])
   defaultBankAccount      Account?        @relation("DefaultBankAccount", fields: [defaultBankAccountId], references: [id])
+  expensesAccount         Account?        @relation("ExpensesAccount", fields: [expensesAccountId], references: [id])
+  resultAccount           Account?        @relation("ResultAccount", fields: [resultAccountId], references: [id])
+
+  // Relaciones de cuentas de retenciones
+  withholdingIvaEmittedAccount        Account? @relation("WhIvaEmittedAccount", fields: [withholdingIvaEmittedAccountId], references: [id])
+  withholdingGananciasEmittedAccount  Account? @relation("WhGananciasEmittedAccount", fields: [withholdingGananciasEmittedAccountId], references: [id])
+  withholdingIibbEmittedAccount       Account? @relation("WhIibbEmittedAccount", fields: [withholdingIibbEmittedAccountId], references: [id])
+  withholdingSussEmittedAccount       Account? @relation("WhSussEmittedAccount", fields: [withholdingSussEmittedAccountId], references: [id])
+  withholdingIvaSufferedAccount       Account? @relation("WhIvaSufferedAccount", fields: [withholdingIvaSufferedAccountId], references: [id])
+  withholdingGananciasSufferedAccount Account? @relation("WhGananciasSufferedAccount", fields: [withholdingGananciasSufferedAccountId], references: [id])
+  withholdingIibbSufferedAccount      Account? @relation("WhIibbSufferedAccount", fields: [withholdingIibbSufferedAccountId], references: [id])
+  withholdingSussSufferedAccount      Account? @relation("WhSussSufferedAccount", fields: [withholdingSussSufferedAccountId], references: [id])
 
   createdAt               DateTime @default(now()) @map("created_at")
   updatedAt               DateTime @updatedAt @map("updated_at")
@@ -803,6 +873,7 @@ model Contractor {
   quotes              Quote[]
   salesInvoices       SalesInvoice[]
   receipts            Receipt[]
+  checks              Check[]
 
   @@unique([companyId, name])
   @@unique([companyId, taxId])
@@ -1659,7 +1730,11 @@ model Supplier {
   company           Company               @relation(fields: [companyId], references: [id])
   defaultAccount    Account?              @relation(fields: [defaultAccountId], references: [id])
   purchaseInvoices  PurchaseInvoice[]
+  purchaseOrders    PurchaseOrder[]
   paymentOrders     PaymentOrder[]
+  expenses          Expense[]
+  checks            Check[]
+  receivingNotes    ReceivingNote[]
 
   createdBy         String                @map("created_by")
   createdAt         DateTime              @default(now()) @map("created_at")
@@ -1734,8 +1809,10 @@ model Product {
   priceListItems      PriceListItem[]
   stockMovements      StockMovement[]
   warehouseStocks     WarehouseStock[]
-  salesInvoiceLines   SalesInvoiceLine[]
+  salesInvoiceLines    SalesInvoiceLine[]
   purchaseInvoiceLines PurchaseInvoiceLine[]
+  purchaseOrderLines   PurchaseOrderLine[]
+  receivingNoteLines   ReceivingNoteLine[]
 
   createdBy           String          @map("created_by")
   createdAt           DateTime        @default(now()) @map("created_at")
@@ -1799,9 +1876,10 @@ model Warehouse {
 
   isActive    Boolean         @default(true) @map("is_active")
 
-  company     Company         @relation(fields: [companyId], references: [id])
-  stocks      WarehouseStock[]
-  movements   StockMovement[]
+  company        Company         @relation(fields: [companyId], references: [id])
+  stocks         WarehouseStock[]
+  movements      StockMovement[]
+  receivingNotes ReceivingNote[]
 
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
@@ -1972,6 +2050,115 @@ enum PaymentOrderStatus {
   @@map("payment_order_status")
 }
 
+enum ExpenseStatus {
+  DRAFT
+  CONFIRMED
+  PARTIAL_PAID
+  PAID
+  CANCELLED
+
+  @@map("expense_status")
+}
+
+enum PurchaseOrderStatus {
+  DRAFT                  // Borrador
+  PENDING_APPROVAL       // Pendiente de aprobacion
+  APPROVED               // Aprobada
+  PARTIALLY_RECEIVED     // Recibida parcialmente
+  COMPLETED              // Completada
+  CANCELLED              // Cancelada
+
+  @@map("purchase_order_status")
+}
+
+enum PurchaseOrderInvoicingStatus {
+  NOT_INVOICED          // Sin facturar
+  PARTIALLY_INVOICED    // Facturada parcialmente
+  FULLY_INVOICED        // Facturada totalmente
+
+  @@map("purchase_order_invoicing_status")
+}
+
+enum ReceivingNoteStatus {
+  DRAFT
+  CONFIRMED
+  CANCELLED
+
+  @@map("receiving_note_status")
+}
+
+enum PurchaseOrderInstallmentStatus {
+  PENDING    // Sin facturar
+  INVOICED   // Factura vinculada
+  PAID       // Pagada
+
+  @@map("purchase_order_installment_status")
+}
+
+enum WithholdingTaxType {
+  IVA
+  GANANCIAS
+  IIBB
+  SUSS
+
+  @@map("withholding_tax_type")
+}
+
+// ============================================
+// CHEQUES
+// ============================================
+
+enum CheckType {
+  OWN         // Cheque propio (emitido)
+  THIRD_PARTY // Cheque de tercero (recibido)
+
+  @@map("check_type")
+}
+
+enum CheckStatus {
+  PORTFOLIO // En cartera (terceros recibidos)
+  DEPOSITED // Depositado en banco
+  CLEARED   // Acreditado
+  REJECTED  // Rechazado
+  ENDORSED  // Endosado a tercero
+  DELIVERED // Entregado (propio emitido)
+  CASHED    // Cobrado (propio debitado)
+  VOIDED    // Anulado
+
+  @@map("check_status")
+}
+
+// ============================================
+// PROYECCIONES DE CASHFLOW
+// ============================================
+
+enum ProjectionType {
+  INCOME
+  EXPENSE
+
+  @@map("projection_type")
+}
+
+enum ProjectionCategory {
+  SALES
+  PURCHASES
+  SALARIES
+  TAXES
+  RENT
+  SERVICES
+  OTHER
+
+  @@map("projection_category")
+}
+
+enum ProjectionStatus {
+  PENDING
+  PARTIAL
+  CONFIRMED
+
+  @@map("projection_status")
+}
+
 model SalesPointOfSale {
   id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   companyId       String    @map("company_id") @db.Uuid
@@ -2025,8 +2212,15 @@ model SalesInvoice {
   // Estado
   status            SalesInvoiceStatus    @default(DRAFT)
 
+  // Documento adjunto
+  documentUrl       String?               @map("document_url")
+  documentKey       String?               @map("document_key")
+
   // Relación con contabilidad
   journalEntryId    String?               @map("journal_entry_id") @db.Uuid
+
+  // NC/ND: referencia a factura original (opcional)
+  originalInvoiceId String?               @map("original_invoice_id") @db.Uuid
 
   // Relaciones
   company           Company               @relation(fields: [companyId], references: [id])
@@ -2036,6 +2230,11 @@ model SalesInvoice {
   journalEntry      JournalEntry?         @relation(fields: [journalEntryId], references: [id])
   cashMovements     CashMovement[]
   receiptItems      ReceiptItem[]
+  originalInvoice   SalesInvoice?         @relation("SalesInvoiceCreditDebitNotes", fields: [originalInvoiceId], references: [id])
+  creditDebitNotes  SalesInvoice[]        @relation("SalesInvoiceCreditDebitNotes")
+  creditNoteApplicationsGiven     SalesCreditNoteApplication[] @relation("CreditNoteApplicationsGiven")
+  creditNoteApplicationsReceived  SalesCreditNoteApplication[] @relation("CreditNoteApplicationsReceived")
+  projectionLinks   ProjectionDocumentLink[]
 
   createdBy         String                @map("created_by")
   createdAt         DateTime              @default(now()) @map("created_at")
@@ -2102,8 +2301,18 @@ model PurchaseInvoice {
   // Estado
   status            PurchaseInvoiceStatus   @default(DRAFT)
 
+  // Documento adjunto
+  documentUrl       String?                 @map("document_url")
+  documentKey       String?                 @map("document_key")
+
   // Relación con contabilidad (futura)
   journalEntryId    String?                 @map("journal_entry_id") @db.Uuid
+
+  // NC/ND: referencia a factura original (opcional)
+  originalInvoiceId String?                 @map("original_invoice_id") @db.Uuid
+
+  // Orden de Compra asociada (opcional)
+  purchaseOrderId   String?                 @map("purchase_order_id") @db.Uuid
 
   // Relaciones
   company           Company                 @relation(fields: [companyId], references: [id])
@@ -2112,12 +2321,21 @@ model PurchaseInvoice {
   journalEntry      JournalEntry?           @relation(fields: [journalEntryId], references: [id])
   cashMovements     CashMovement[]
   paymentOrderItems PaymentOrderItem[]
+  originalInvoice   PurchaseInvoice?        @relation("PurchaseInvoiceCreditDebitNotes", fields: [originalInvoiceId], references: [id])
+  creditDebitNotes  PurchaseInvoice[]       @relation("PurchaseInvoiceCreditDebitNotes")
+  creditNoteApplicationsGiven     PurchaseCreditNoteApplication[] @relation("PurchaseCNApplicationsGiven")
+  creditNoteApplicationsReceived  PurchaseCreditNoteApplication[] @relation("PurchaseCNApplicationsReceived")
+  projectionLinks   ProjectionDocumentLink[]
+  purchaseOrderInstallments PurchaseOrderInstallment[]
+  purchaseOrder     PurchaseOrder?          @relation(fields: [purchaseOrderId], references: [id])
+  receivingNotes    ReceivingNote[]
 
   createdBy         String                  @map("created_by")
   createdAt         DateTime                @default(now()) @map("created_at")
   updatedAt         DateTime                @updatedAt @map("updated_at")
 
   @@unique([companyId, supplierId, fullNumber])
+  @@index([purchaseOrderId])
   @@map("purchase_invoices")
 }
 
@@ -2137,8 +2355,12 @@ model PurchaseInvoiceLine {
   subtotal        Decimal           @db.Decimal(12, 2)
   total           Decimal           @db.Decimal(12, 2)
 
-  invoice         PurchaseInvoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  product         Product?          @relation(fields: [productId], references: [id])
+  // Vinculación con línea de OC (opcional)
+  purchaseOrderLineId String?       @map("purchase_order_line_id") @db.Uuid
+
+  invoice           PurchaseInvoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product           Product?           @relation(fields: [productId], references: [id])
+  purchaseOrderLine PurchaseOrderLine? @relation(fields: [purchaseOrderLineId], references: [id])
 
   @@map("purchase_invoice_lines")
 }
@@ -2277,6 +2499,7 @@ model BankAccount {
   movements       BankMovement[]
   receiptPayments ReceiptPayment[]
   paymentOrderPayments PaymentOrderPayment[]
+  checks          Check[]
 
   createdBy       String?             @map("created_by")
   createdAt       DateTime            @default(now()) @map("created_at")
@@ -2305,6 +2528,10 @@ model BankMovement {
   referenceType   String?           @map("reference_type")
   referenceId     String?           @map("reference_id") @db.Uuid
 
+  // Vinculación con documentos de tesorería
+  receiptId       String?           @map("receipt_id") @db.Uuid
+  paymentOrderId  String?           @map("payment_order_id") @db.Uuid
+
   // Conciliación
   reconciled      Boolean           @default(false)
   reconciledAt    DateTime?         @map("reconciled_at")
@@ -2312,6 +2539,9 @@ model BankMovement {
 
   bankAccount     BankAccount       @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
   company         Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  receipt         Receipt?          @relation(fields: [receiptId], references: [id])
+  paymentOrder    PaymentOrder?     @relation(fields: [paymentOrderId], references: [id])
+  check           Check?
 
   createdBy       String            @map("created_by")
   createdAt       DateTime          @default(now()) @map("created_at")
@@ -2341,6 +2571,10 @@ model Receipt {
 
   status          ReceiptStatus   @default(DRAFT)
 
+  // Documento adjunto
+  documentUrl     String?         @map("document_url")
+  documentKey     String?         @map("document_key")
+
   // Relación con contabilidad
   journalEntryId  String?         @map("journal_entry_id") @db.Uuid
 
@@ -2348,6 +2582,8 @@ model Receipt {
   customer        Contractor      @relation(fields: [customerId], references: [id])
   items           ReceiptItem[]
   payments        ReceiptPayment[]
+  withholdings    ReceiptWithholding[]
+  bankMovements   BankMovement[]
   journalEntry    JournalEntry?   @relation(fields: [journalEntryId], references: [id])
 
   createdBy       String          @map("created_by")
@@ -2391,6 +2627,7 @@ model ReceiptPayment {
   receipt         Receipt         @relation(fields: [receiptId], references: [id], onDelete: Cascade)
   cashRegister    CashRegister?   @relation(fields: [cashRegisterId], references: [id])
   bankAccount     BankAccount?    @relation(fields: [bankAccountId], references: [id])
+  check           Check?
 
   @@map("receipt_payments")
 }
@@ -2402,7 +2639,7 @@ model ReceiptPayment {
 model PaymentOrder {
   id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   companyId       String              @map("company_id") @db.Uuid
-  supplierId      String              @map("supplier_id") @db.Uuid
+  supplierId      String?             @map("supplier_id") @db.Uuid
 
   number          Int
   fullNumber      String              @map("full_number")  // OP-00001
@@ -2413,13 +2650,19 @@ model PaymentOrder {
 
   status          PaymentOrderStatus  @default(DRAFT)
 
+  // Documento adjunto
+  documentUrl     String?             @map("document_url")
+  documentKey     String?             @map("document_key")
+
   // Relación con contabilidad
   journalEntryId  String?             @map("journal_entry_id") @db.Uuid
 
   company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  supplier        Supplier            @relation(fields: [supplierId], references: [id])
+  supplier        Supplier?           @relation(fields: [supplierId], references: [id])
   items           PaymentOrderItem[]
   payments        PaymentOrderPayment[]
+  withholdings    PaymentOrderWithholding[]
+  bankMovements   BankMovement[]
   journalEntry    JournalEntry?       @relation(fields: [journalEntryId], references: [id])
 
   createdBy       String              @map("created_by")
@@ -2435,13 +2678,15 @@ model PaymentOrder {
 }
 
 model PaymentOrderItem {
-  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  paymentOrderId  String          @map("payment_order_id") @db.Uuid
-  invoiceId       String          @map("invoice_id") @db.Uuid
-  amount          Decimal         @db.Decimal(15, 2)
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  paymentOrderId  String           @map("payment_order_id") @db.Uuid
+  invoiceId       String?          @map("invoice_id") @db.Uuid
+  expenseId       String?          @map("expense_id") @db.Uuid
+  amount          Decimal          @db.Decimal(15, 2)
 
-  paymentOrder    PaymentOrder    @relation(fields: [paymentOrderId], references: [id], onDelete: Cascade)
-  invoice         PurchaseInvoice @relation(fields: [invoiceId], references: [id])
+  paymentOrder    PaymentOrder     @relation(fields: [paymentOrderId], references: [id], onDelete: Cascade)
+  invoice         PurchaseInvoice? @relation(fields: [invoiceId], references: [id])
+  expense         Expense?         @relation(fields: [expenseId], references: [id])
 
   @@map("payment_order_items")
 }
@@ -2463,6 +2708,484 @@ model PaymentOrderPayment {
   paymentOrder    PaymentOrder    @relation(fields: [paymentOrderId], references: [id], onDelete: Cascade)
   cashRegister    CashRegister?   @relation(fields: [cashRegisterId], references: [id])
   bankAccount     BankAccount?    @relation(fields: [bankAccountId], references: [id])
+  check           Check?
 
   @@map("payment_order_payments")
+}
+
+// ============================================
+// RETENCIONES IMPOSITIVAS
+// ============================================
+
+model ReceiptWithholding {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  receiptId         String              @map("receipt_id") @db.Uuid
+  taxType           WithholdingTaxType  @map("tax_type")
+  rate              Decimal             @db.Decimal(5, 2)
+  amount            Decimal             @db.Decimal(15, 2)
+  certificateNumber String?             @map("certificate_number")
+
+  receipt           Receipt             @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+
+  @@map("receipt_withholdings")
+}
+
+model PaymentOrderWithholding {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  paymentOrderId    String              @map("payment_order_id") @db.Uuid
+  taxType           WithholdingTaxType  @map("tax_type")
+  rate              Decimal             @db.Decimal(5, 2)
+  amount            Decimal             @db.Decimal(15, 2)
+  certificateNumber String?             @map("certificate_number")
+
+  paymentOrder      PaymentOrder        @relation(fields: [paymentOrderId], references: [id], onDelete: Cascade)
+
+  @@map("payment_order_withholdings")
+}
+
+// ============================================
+// ASIENTOS RECURRENTES
+// ============================================
+
+model RecurringEntry {
+  id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId       String              @map("company_id") @db.Uuid
+  name            String              // Nombre descriptivo
+  description     String              // Descripción para el asiento generado
+  frequency       RecurringFrequency
+  startDate       DateTime            @map("start_date")
+  endDate         DateTime?           @map("end_date")       // Null = sin vencimiento
+  lastGenerated   DateTime?           @map("last_generated")  // Última fecha de generación
+  nextDueDate     DateTime            @map("next_due_date")   // Próxima fecha de generación
+  isActive        Boolean             @default(true) @map("is_active")
+  createdBy       String              @map("created_by")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  lines           RecurringEntryLine[]
+
+  @@map("recurring_entries")
+}
+
+model RecurringEntryLine {
+  id                String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recurringEntryId  String         @map("recurring_entry_id") @db.Uuid
+  accountId         String         @map("account_id") @db.Uuid
+  description       String?
+  debit             Float          @default(0)
+  credit            Float          @default(0)
+
+  recurringEntry    RecurringEntry @relation(fields: [recurringEntryId], references: [id], onDelete: Cascade)
+  account           Account        @relation(fields: [accountId], references: [id])
+
+  @@map("recurring_entry_lines")
+}
+
+// ============================================
+// APLICACIONES DE NOTAS DE CRÉDITO
+// ============================================
+
+model SalesCreditNoteApplication {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  creditNoteId String   @map("credit_note_id") @db.Uuid
+  invoiceId    String   @map("invoice_id") @db.Uuid
+  amount       Decimal  @db.Decimal(15, 2)
+  appliedAt    DateTime @default(now()) @map("applied_at")
+  companyId    String   @map("company_id") @db.Uuid
+
+  creditNote SalesInvoice @relation("CreditNoteApplicationsGiven", fields: [creditNoteId], references: [id])
+  invoice    SalesInvoice @relation("CreditNoteApplicationsReceived", fields: [invoiceId], references: [id])
+  company    Company      @relation(fields: [companyId], references: [id])
+
+  @@map("sales_credit_note_applications")
+}
+
+model PurchaseCreditNoteApplication {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  creditNoteId String   @map("credit_note_id") @db.Uuid
+  invoiceId    String   @map("invoice_id") @db.Uuid
+  amount       Decimal  @db.Decimal(15, 2)
+  appliedAt    DateTime @default(now()) @map("applied_at")
+  companyId    String   @map("company_id") @db.Uuid
+
+  creditNote PurchaseInvoice @relation("PurchaseCNApplicationsGiven", fields: [creditNoteId], references: [id])
+  invoice    PurchaseInvoice @relation("PurchaseCNApplicationsReceived", fields: [invoiceId], references: [id])
+  company    Company         @relation(fields: [companyId], references: [id])
+
+  @@map("purchase_credit_note_applications")
+}
+
+// ============================================
+// MÓDULO GASTOS
+// ============================================
+
+model ExpenseCategory {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  description String?
+  companyId   String    @map("company_id") @db.Uuid
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  company     Company   @relation(fields: [companyId], references: [id])
+  expenses    Expense[]
+
+  @@unique([companyId, name])
+  @@map("expense_categories")
+}
+
+model Expense {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  number        Int
+  fullNumber    String          @map("full_number")
+  description   String
+  amount        Decimal         @db.Decimal(15, 2)
+  date          DateTime        @db.Date
+  dueDate       DateTime?       @map("due_date") @db.Date
+  status        ExpenseStatus   @default(DRAFT)
+  notes         String?
+
+  categoryId    String          @map("category_id") @db.Uuid
+  supplierId    String?         @map("supplier_id") @db.Uuid
+  companyId     String          @map("company_id") @db.Uuid
+
+  // Relación con contabilidad
+  journalEntryId String?        @map("journal_entry_id") @db.Uuid
+
+  createdBy     String          @map("created_by")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  category      ExpenseCategory @relation(fields: [categoryId], references: [id])
+  supplier      Supplier?       @relation(fields: [supplierId], references: [id])
+  company       Company         @relation(fields: [companyId], references: [id])
+  journalEntry  JournalEntry?   @relation(fields: [journalEntryId], references: [id])
+  attachments   ExpenseAttachment[]
+  paymentOrderItems PaymentOrderItem[]
+  projectionLinks   ProjectionDocumentLink[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status])
+  @@map("expenses")
+}
+
+model ExpenseAttachment {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  expenseId   String    @map("expense_id") @db.Uuid
+  fileName    String    @map("file_name")
+  fileKey     String    @map("file_key")
+  fileSize    Int?      @map("file_size")
+  mimeType    String?   @map("mime_type")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  expense     Expense   @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  @@map("expense_attachments")
+}
+
+// ============================================
+// ORDENES DE COMPRA
+// ============================================
+
+model PurchaseOrder {
+  id                    String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId             String                @map("company_id") @db.Uuid
+  supplierId            String                @map("supplier_id") @db.Uuid
+
+  // Numeracion secuencial
+  number                Int
+  fullNumber            String                @map("full_number")  // OC-00001
+
+  // Fechas
+  issueDate             DateTime              @map("issue_date") @db.Date
+  expectedDeliveryDate  DateTime?             @map("expected_delivery_date") @db.Date
+
+  // Condiciones
+  paymentConditions     String?               @map("payment_conditions") @db.Text
+  deliveryAddress       String?               @map("delivery_address")
+  deliveryNotes         String?               @map("delivery_notes") @db.Text
+
+  // Importes (calculados desde lineas)
+  subtotal              Decimal               @default(0) @db.Decimal(12, 2)
+  vatAmount             Decimal               @default(0) @map("vat_amount") @db.Decimal(12, 2)
+  total                 Decimal               @default(0) @db.Decimal(12, 2)
+
+  // Observaciones
+  notes                 String?               @db.Text
+
+  // Estado
+  status                PurchaseOrderStatus   @default(DRAFT)
+  invoicingStatus       PurchaseOrderInvoicingStatus @default(NOT_INVOICED) @map("invoicing_status")
+
+  // Aprobacion
+  approvedBy            String?               @map("approved_by")
+  approvedAt            DateTime?             @map("approved_at")
+
+  // Relaciones
+  company               Company               @relation(fields: [companyId], references: [id])
+  supplier              Supplier              @relation(fields: [supplierId], references: [id])
+  lines                 PurchaseOrderLine[]
+  installments          PurchaseOrderInstallment[]
+  projectionLinks       ProjectionDocumentLink[]
+  receivingNotes        ReceivingNote[]
+  purchaseInvoices      PurchaseInvoice[]
+
+  createdBy             String                @map("created_by")
+  createdAt             DateTime              @default(now()) @map("created_at")
+  updatedAt             DateTime              @updatedAt @map("updated_at")
+
+  @@unique([companyId, number])
+  @@index([companyId, status])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderLine {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId         String            @map("order_id") @db.Uuid
+  productId       String?           @map("product_id") @db.Uuid
+
+  description     String
+  quantity        Decimal           @db.Decimal(12, 3)
+  unitCost        Decimal           @map("unit_cost") @db.Decimal(12, 2)
+
+  // Impuestos
+  vatRate         Decimal           @map("vat_rate") @db.Decimal(5, 2)
+  vatAmount       Decimal           @map("vat_amount") @db.Decimal(12, 2)
+
+  subtotal        Decimal           @db.Decimal(12, 2)
+  total           Decimal           @db.Decimal(12, 2)
+
+  // Recepcion parcial
+  receivedQty     Decimal           @default(0) @map("received_qty") @db.Decimal(12, 3)
+  // Facturacion parcial
+  invoicedQty     Decimal           @default(0) @map("invoiced_qty") @db.Decimal(12, 3)
+
+  order                PurchaseOrder        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product              Product?             @relation(fields: [productId], references: [id])
+  receivingNoteLines   ReceivingNoteLine[]
+  purchaseInvoiceLines PurchaseInvoiceLine[]
+
+  @@map("purchase_order_lines")
+}
+
+model PurchaseOrderInstallment {
+  id                  String                            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId           String                            @map("company_id") @db.Uuid
+  orderId             String                            @map("order_id") @db.Uuid
+  number              Int
+  dueDate             DateTime                          @map("due_date") @db.Date
+  amount              Decimal                           @db.Decimal(12, 2)
+  status              PurchaseOrderInstallmentStatus    @default(PENDING)
+  purchaseInvoiceId   String?                           @map("purchase_invoice_id") @db.Uuid
+  notes               String?                           @db.Text
+
+  company             Company           @relation(fields: [companyId], references: [id])
+  order               PurchaseOrder     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  purchaseInvoice     PurchaseInvoice?  @relation(fields: [purchaseInvoiceId], references: [id])
+
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+
+  @@unique([orderId, number])
+  @@index([companyId, orderId])
+  @@map("purchase_order_installments")
+}
+
+// ============================================
+// REMITOS DE RECEPCION
+// ============================================
+
+model ReceivingNote {
+  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId           String              @map("company_id") @db.Uuid
+  supplierId          String              @map("supplier_id") @db.Uuid
+  warehouseId         String              @map("warehouse_id") @db.Uuid
+
+  // Numeracion secuencial
+  number              Int
+  fullNumber          String              @map("full_number") // RR-00001
+
+  // Documento origen (opcionales, puede ser suelto)
+  purchaseOrderId     String?             @map("purchase_order_id") @db.Uuid
+  purchaseInvoiceId   String?             @map("purchase_invoice_id") @db.Uuid
+
+  // Fechas
+  receptionDate       DateTime            @map("reception_date") @db.Date
+
+  // Observaciones
+  notes               String?             @db.Text
+
+  // Estado
+  status              ReceivingNoteStatus @default(DRAFT)
+
+  // Relaciones
+  company             Company             @relation(fields: [companyId], references: [id])
+  supplier            Supplier            @relation(fields: [supplierId], references: [id])
+  warehouse           Warehouse           @relation(fields: [warehouseId], references: [id])
+  purchaseOrder       PurchaseOrder?      @relation(fields: [purchaseOrderId], references: [id])
+  purchaseInvoice     PurchaseInvoice?    @relation(fields: [purchaseInvoiceId], references: [id])
+  lines               ReceivingNoteLine[]
+
+  createdBy           String              @map("created_by")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+
+  @@unique([companyId, number])
+  @@index([companyId, status])
+  @@index([purchaseOrderId])
+  @@index([purchaseInvoiceId])
+  @@map("receiving_notes")
+}
+
+model ReceivingNoteLine {
+  id                    String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  receivingNoteId       String              @map("receiving_note_id") @db.Uuid
+  productId             String              @map("product_id") @db.Uuid
+
+  description           String
+  quantity              Decimal             @db.Decimal(12, 3)
+
+  // Referencia a linea de OC (para tracking de receivedQty)
+  purchaseOrderLineId   String?             @map("purchase_order_line_id") @db.Uuid
+
+  // Observaciones de la linea
+  notes                 String?             @db.Text
+
+  receivingNote         ReceivingNote       @relation(fields: [receivingNoteId], references: [id], onDelete: Cascade)
+  product               Product             @relation(fields: [productId], references: [id])
+  purchaseOrderLine     PurchaseOrderLine?  @relation(fields: [purchaseOrderLineId], references: [id])
+
+  @@map("receiving_note_lines")
+}
+
+// ============================================
+// CHEQUES
+// ============================================
+
+model Check {
+  id                    String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId             String       @map("company_id") @db.Uuid
+  type                  CheckType
+  status                CheckStatus  @default(PORTFOLIO)
+
+  // Datos del cheque
+  checkNumber           String       @map("check_number")
+  bankName              String       @map("bank_name")
+  branch                String?
+  accountNumber         String?      @map("account_number")
+  amount                Decimal      @db.Decimal(15, 2)
+  issueDate             DateTime     @map("issue_date")
+  dueDate               DateTime     @map("due_date")
+
+  // Librador y beneficiario
+  drawerName            String       @map("drawer_name")
+  drawerTaxId           String?      @map("drawer_tax_id")
+  payeeName             String?      @map("payee_name")
+
+  // Relaciones con terceros
+  customerId            String?      @map("customer_id") @db.Uuid
+  supplierId            String?      @map("supplier_id") @db.Uuid
+
+  // Relaciones con documentos de tesorería
+  receiptPaymentId      String?      @unique @map("receipt_payment_id") @db.Uuid
+  paymentOrderPaymentId String?      @unique @map("payment_order_payment_id") @db.Uuid
+
+  // Relación con banco (al depositar)
+  bankAccountId         String?      @map("bank_account_id") @db.Uuid
+  bankMovementId        String?      @unique @map("bank_movement_id") @db.Uuid
+
+  // Endoso
+  endorsedToName        String?      @map("endorsed_to_name")
+  endorsedToTaxId       String?      @map("endorsed_to_tax_id")
+  endorsedAt            DateTime?    @map("endorsed_at")
+
+  // Rechazo
+  rejectedAt            DateTime?    @map("rejected_at")
+  rejectionReason       String?      @map("rejection_reason")
+
+  // Depósito y acreditación
+  depositedAt           DateTime?    @map("deposited_at")
+  clearedAt             DateTime?    @map("cleared_at")
+
+  notes                 String?      @db.Text
+
+  // Relations
+  company               Company      @relation(fields: [companyId], references: [id])
+  customer              Contractor?  @relation(fields: [customerId], references: [id])
+  supplier              Supplier?    @relation(fields: [supplierId], references: [id])
+  bankAccount           BankAccount? @relation(fields: [bankAccountId], references: [id])
+  bankMovement          BankMovement? @relation(fields: [bankMovementId], references: [id])
+  receiptPayment        ReceiptPayment? @relation(fields: [receiptPaymentId], references: [id])
+  paymentOrderPayment   PaymentOrderPayment? @relation(fields: [paymentOrderPaymentId], references: [id])
+
+  createdBy             String       @map("created_by")
+  createdAt             DateTime     @default(now()) @map("created_at")
+  updatedAt             DateTime     @updatedAt @map("updated_at")
+
+  @@index([companyId, type, status])
+  @@index([companyId, dueDate])
+  @@map("checks")
+}
+
+// ============================================
+// PROYECCIONES DE CASHFLOW
+// ============================================
+
+model CashflowProjection {
+  id          String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId   String              @map("company_id") @db.Uuid
+  type        ProjectionType
+  category    ProjectionCategory
+  description String
+  amount      Decimal             @db.Decimal(15, 2)
+  date        DateTime            @db.Date
+  isRecurring Boolean             @default(false) @map("is_recurring")
+  notes           String?             @db.Text
+  status          ProjectionStatus    @default(PENDING)
+  confirmedAmount Decimal             @default(0) @map("confirmed_amount") @db.Decimal(15, 2)
+
+  company         Company             @relation(fields: [companyId], references: [id])
+  documentLinks   ProjectionDocumentLink[]
+  createdBy       String              @map("created_by")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  @@index([companyId, date])
+  @@index([companyId, status])
+  @@map("cashflow_projections")
+}
+
+model ProjectionDocumentLink {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId         String   @map("company_id") @db.Uuid
+  projectionId      String   @map("projection_id") @db.Uuid
+  amount            Decimal  @db.Decimal(15, 2)
+
+  // FK polimórfico — solo uno será non-null
+  salesInvoiceId    String?  @map("sales_invoice_id") @db.Uuid
+  purchaseInvoiceId String?  @map("purchase_invoice_id") @db.Uuid
+  expenseId         String?  @map("expense_id") @db.Uuid
+  purchaseOrderId   String?  @map("purchase_order_id") @db.Uuid
+
+  notes             String?  @db.Text
+
+  // Relations
+  company           Company             @relation(fields: [companyId], references: [id])
+  projection        CashflowProjection  @relation(fields: [projectionId], references: [id], onDelete: Cascade)
+  salesInvoice      SalesInvoice?       @relation(fields: [salesInvoiceId], references: [id])
+  purchaseInvoice   PurchaseInvoice?    @relation(fields: [purchaseInvoiceId], references: [id])
+  expense           Expense?            @relation(fields: [expenseId], references: [id])
+  purchaseOrder     PurchaseOrder?      @relation(fields: [purchaseOrderId], references: [id])
+
+  createdBy         String   @map("created_by")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([projectionId])
+  @@index([salesInvoiceId])
+  @@index([purchaseInvoiceId])
+  @@index([expenseId])
+  @@index([purchaseOrderId])
+  @@map("projection_document_links")
 }

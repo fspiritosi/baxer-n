@@ -26,6 +26,10 @@
     "cy:run": "cypress run",
     "cy:run:auth": "cypress run --spec 'cypress/e2e/auth/**/*.cy.ts'",
     "cy:run:company": "cypress run --spec 'cypress/e2e/company/**/*.cy.ts'",
+    "cy:run:dashboard": "cypress run --spec 'cypress/e2e/dashboard/**/*.cy.ts'",
+    "cy:run:commercial": "cypress run --spec 'cypress/e2e/commercial/**/*.cy.ts'",
+    "cy:run:accounting": "cypress run --spec 'cypress/e2e/accounting/**/*.cy.ts'",
+    "cy:run:company-general": "cypress run --spec 'cypress/e2e/company-general/**/*.cy.ts'",
     "test:e2e": "start-server-and-test dev http://localhost:3001 cy:run",
     "test:e2e:open": "start-server-and-test dev http://localhost:3001 cy:open"
   },

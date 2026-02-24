@@ -1,15 +1,16 @@
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
-import { _ReportsSelector } from './_ReportsSelector';
+import { _ReportsSelector, type ReportType } from './_ReportsSelector';
 import { _TrialBalanceReport } from './_TrialBalanceReport';
 import { _BalanceSheetReport } from './_BalanceSheetReport';
 import { _IncomeStatementReport } from './_IncomeStatementReport';
 import { _JournalBookReport } from './_JournalBookReport';
 import { _GeneralLedgerReport } from './_GeneralLedgerReport';
+import { _EntriesWithoutDocumentsReport } from './_EntriesWithoutDocumentsReport';
+import { _ReversalLogReport } from './_ReversalLogReport';
+import { _DocumentTraceabilityReport } from './_DocumentTraceabilityReport';
 import { useState } from 'react';
-
-type ReportType = 'trial-balance' | 'journal-book' | 'general-ledger' | 'balance-sheet' | 'income-statement';
 
 interface ReportsContentProps {
   companyId: string;
@@ -60,6 +61,18 @@ export function _ReportsContent({ companyId }: ReportsContentProps) {
 
       {selectedReport === 'general-ledger' && (
         <_GeneralLedgerReport companyId={companyId} />
+      )}
+
+      {selectedReport === 'entries-without-documents' && (
+        <_EntriesWithoutDocumentsReport companyId={companyId} />
+      )}
+
+      {selectedReport === 'reversal-log' && (
+        <_ReversalLogReport companyId={companyId} />
+      )}
+
+      {selectedReport === 'document-traceability' && (
+        <_DocumentTraceabilityReport companyId={companyId} />
       )}
     </div>
   );

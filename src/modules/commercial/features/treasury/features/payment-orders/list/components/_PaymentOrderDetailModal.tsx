@@ -5,10 +5,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/shared/compo
 import { Badge } from '@/shared/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Skeleton } from '@/shared/components/ui/skeleton';
+import { ArrowUp } from 'lucide-react';
 import { getPaymentOrder } from '../../actions.server';
-import { PAYMENT_ORDER_STATUS_LABELS, PAYMENT_ORDER_STATUS_BADGES, PAYMENT_METHOD_LABELS } from '../../../../shared/validators';
+import { PAYMENT_ORDER_STATUS_LABELS, PAYMENT_ORDER_STATUS_BADGES, PAYMENT_METHOD_LABELS, BANK_MOVEMENT_TYPE_LABELS, WITHHOLDING_TAX_TYPE_LABELS } from '../../../../shared/validators';
 import type { PaymentOrderWithDetails } from '../../../../shared/types';
 import moment from 'moment';
+import { logger } from '@/shared/lib/logger';
+import { _DocumentAttachment } from '@/modules/commercial/shared/components/_DocumentAttachment';
 
 interface PaymentOrderDetailModalProps {
   paymentOrderId: string | null;
@@ -34,7 +37,7 @@ export function PaymentOrderDetailModal({ paymentOrderId, open, onOpenChange }: 
       const data = await getPaymentOrder(paymentOrderId);
       setPaymentOrder(data);
     } catch (error) {
-      console.error('Error al cargar orden de pago:', error);
+      logger.error('Error al cargar orden de pago', { data: { error } });
     } finally {
       setLoading(false);
     }
@@ -42,7 +45,7 @@ export function PaymentOrderDetailModal({ paymentOrderId, open, onOpenChange }: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="md:min-w-[800px]">
         <DialogHeader>
           <DialogTitle>Detalle de Orden de Pago</DialogTitle>
         </DialogHeader>
@@ -84,15 +87,17 @@ export function PaymentOrderDetailModal({ paymentOrderId, open, onOpenChange }: 
                   </div>
                 </div>
 
-                <div>
-                  <p className="text-sm text-muted-foreground">Proveedor</p>
-                  <p className="font-medium">
-                    {paymentOrder.supplier.tradeName || paymentOrder.supplier.businessName}
-                  </p>
-                  {paymentOrder.supplier.taxId && (
-                    <p className="text-sm text-muted-foreground">CUIT: {paymentOrder.supplier.taxId}</p>
-                  )}
-                </div>
+                {paymentOrder.supplier && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Proveedor</p>
+                    <p className="font-medium">
+                      {paymentOrder.supplier.tradeName || paymentOrder.supplier.businessName}
+                    </p>
+                    {paymentOrder.supplier.taxId && (
+                      <p className="text-sm text-muted-foreground">CUIT: {paymentOrder.supplier.taxId}</p>
+                    )}
+                  </div>
+                )}
 
                 {paymentOrder.notes && (
                   <div>
@@ -103,20 +108,31 @@ export function PaymentOrderDetailModal({ paymentOrderId, open, onOpenChange }: 
               </CardContent>
             </Card>
 
-            {/* Facturas */}
+            {/* Items a Pagar */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Facturas a Pagar</CardTitle>
+                <CardTitle className="text-lg">Items a Pagar</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
                   {paymentOrder.items.map((item) => (
                     <div key={item.id} className="flex justify-between items-center p-3 border rounded-lg">
                       <div>
-                        <p className="font-medium">{item.invoice.fullNumber}</p>
-                        <p className="text-sm text-muted-foreground">
-                          Total: ${item.invoice.total.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-                        </p>
+                        {item.invoice ? (
+                          <>
+                            <p className="font-medium">{item.invoice.fullNumber}</p>
+                            <p className="text-sm text-muted-foreground">
+                              Factura - Total: ${item.invoice.total.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                            </p>
+                          </>
+                        ) : item.expense ? (
+                          <>
+                            <p className="font-medium">{item.expense.fullNumber}</p>
+                            <p className="text-sm text-muted-foreground">
+                              Gasto - {item.expense.description}
+                            </p>
+                          </>
+                        ) : null}
                       </div>
                       <div className="text-right">
                         <p className="text-sm text-muted-foreground">Monto a pagar</p>
@@ -170,6 +186,90 @@ export function PaymentOrderDetailModal({ paymentOrderId, open, onOpenChange }: 
                 </div>
               </CardContent>
             </Card>
+
+            {/* Retenciones Emitidas */}
+            {paymentOrder.withholdings && paymentOrder.withholdings.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Retenciones Emitidas</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {paymentOrder.withholdings.map((w) => (
+                      <div key={w.id} className="flex justify-between items-center p-3 border rounded-lg">
+                        <div>
+                          <p className="font-medium">
+                            {WITHHOLDING_TAX_TYPE_LABELS[w.taxType as keyof typeof WITHHOLDING_TAX_TYPE_LABELS]}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            Alícuota: {w.rate}%
+                            {w.certificateNumber && ` | Cert. N° ${w.certificateNumber}`}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-medium">
+                            ${w.amount.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                      <p className="font-medium">Total Retenciones</p>
+                      <p className="font-bold">
+                        ${paymentOrder.withholdings.reduce((sum, w) => sum + w.amount, 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Movimientos Bancarios Vinculados */}
+            {paymentOrder.bankMovements && paymentOrder.bankMovements.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Movimientos Bancarios</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {paymentOrder.bankMovements.map((mov) => (
+                      <div key={mov.id} className="flex justify-between items-center p-3 border rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <ArrowUp className="h-4 w-4 text-red-600" />
+                          <div>
+                            <p className="font-medium">
+                              {BANK_MOVEMENT_TYPE_LABELS[mov.type as keyof typeof BANK_MOVEMENT_TYPE_LABELS] || mov.type}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {mov.bankAccount.bankName} - {mov.bankAccount.accountNumber}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {moment(mov.date).format('DD/MM/YYYY')}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-medium text-red-600">
+                            -${Number(mov.amount).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Documento Adjunto */}
+            <_DocumentAttachment
+              documentType="payment-order"
+              documentId={paymentOrder.id}
+              companyId={paymentOrder.companyId}
+              companyName={paymentOrder.company.name}
+              documentNumber={paymentOrder.fullNumber}
+              hasDocument={!!paymentOrder.documentUrl}
+              documentUrl={paymentOrder.documentUrl}
+            />
           </div>
         ) : null}
       </DialogContent>

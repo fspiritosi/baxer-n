@@ -44,7 +44,7 @@ export function EditReceiptModal({ receiptId, open, onOpenChange }: EditReceiptM
       <DialogTrigger asChild>
         <Button variant="ghost" className="hidden" />
       </DialogTrigger>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl">
         <DialogHeader>
           <DialogTitle>Editar Recibo de Cobro</DialogTitle>
         </DialogHeader>

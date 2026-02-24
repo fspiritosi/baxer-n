@@ -2,9 +2,12 @@
 
 import { auth } from '@clerk/nextjs/server';
 import { revalidatePath } from 'next/cache';
+import { Prisma } from '@/generated/prisma/client';
 import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
 import { getActiveCompanyId } from '@/shared/lib/company';
+import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
+import { parseSearchParams, stateToPrismaParams } from '@/shared/components/common/DataTable/helpers';
 import {
   createWarehouseSchema,
   updateWarehouseSchema,
@@ -535,6 +538,89 @@ export async function getStockMovements(filters?: {
   } catch (error) {
     logger.error('Error al obtener movimientos de stock', { data: { error } });
     throw new Error('Error al obtener movimientos de stock');
+  }
+}
+
+export async function getStockMovementsPaginated(
+  searchParams: DataTableSearchParams,
+  filters?: {
+    warehouseId?: string;
+    productId?: string;
+    type?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+  }
+) {
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const parsed = parseSearchParams(searchParams);
+    const { page, pageSize, search, sortBy, sortOrder } = parsed;
+    const { skip, take, orderBy: prismaOrderBy } = stateToPrismaParams(parsed);
+
+    const where: Prisma.StockMovementWhereInput = {
+      companyId,
+      ...(filters?.warehouseId && { warehouseId: filters.warehouseId }),
+      ...(filters?.productId && { productId: filters.productId }),
+      ...(filters?.type && { type: filters.type as any }),
+      ...(filters?.dateFrom || filters?.dateTo
+        ? {
+            date: {
+              ...(filters?.dateFrom && { gte: filters.dateFrom }),
+              ...(filters?.dateTo && { lte: filters.dateTo }),
+            },
+          }
+        : {}),
+      ...(search && {
+        OR: [
+          { product: { name: { contains: search, mode: 'insensitive' } } },
+          { product: { code: { contains: search, mode: 'insensitive' } } },
+          { notes: { contains: search, mode: 'insensitive' } },
+          { referenceType: { contains: search, mode: 'insensitive' } },
+        ],
+      }),
+    };
+
+    const orderBy = prismaOrderBy && Object.keys(prismaOrderBy).length > 0 ? prismaOrderBy : { date: 'desc' as const };
+
+    const [data, total] = await Promise.all([
+      prisma.stockMovement.findMany({
+        where,
+        include: {
+          warehouse: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+            },
+          },
+          product: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              unitOfMeasure: true,
+            },
+          },
+        },
+        orderBy,
+        skip,
+        take,
+      }),
+      prisma.stockMovement.count({ where }),
+    ]);
+
+    return {
+      data: data.map((m) => ({
+        ...m,
+        quantity: Number(m.quantity),
+      })) as StockMovement[],
+      total,
+    };
+  } catch (error) {
+    logger.error('Error al obtener movimientos de stock paginados', { data: { error } });
+    throw error;
   }
 }
 

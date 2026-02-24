@@ -15,6 +15,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/shared/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/shared/components/ui/alert-dialog';
 import { deletePriceListItem } from '../../list/actions.server';
 import type { PriceListItem } from '../../../../shared/types';
 import { logger } from '@/shared/lib/logger';
@@ -30,15 +40,15 @@ export function _PriceListItemsTable({ priceListId, items }: PriceListItemsTable
   const router = useRouter();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<PriceListItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
-  const handleDelete = async (id: string, productName: string) => {
-    if (!confirm(`¿Estás seguro de eliminar "${productName}" de esta lista?`)) {
-      return;
-    }
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
 
-    setDeletingId(id);
+    setDeletingId(deleteTarget.id);
+    setDeleteTarget(null);
     try {
-      await deletePriceListItem(id);
+      await deletePriceListItem(deleteTarget.id);
       toast.success('Producto eliminado de la lista');
       router.refresh();
     } catch (error) {
@@ -108,7 +118,7 @@ export function _PriceListItemsTable({ priceListId, items }: PriceListItemsTable
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={() => handleDelete(item.id, item.product?.name || 'el producto')}
+                  onClick={() => setDeleteTarget({ id: item.id, name: item.product?.name || 'el producto' })}
                   disabled={deletingId === item.id}
                   className="text-destructive focus:text-destructive"
                 >
@@ -140,6 +150,21 @@ export function _PriceListItemsTable({ priceListId, items }: PriceListItemsTable
           onOpenChange={(open) => !open && setEditingItem(null)}
         />
       )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Vas a eliminar &quot;{deleteTarget?.name}&quot; de esta lista. Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>Eliminar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

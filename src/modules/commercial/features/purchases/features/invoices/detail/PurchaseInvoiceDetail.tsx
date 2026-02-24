@@ -2,13 +2,18 @@ import { getPurchaseInvoiceById } from '../list/actions.server';
 import { Button } from '@/shared/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
-import { ArrowLeft } from 'lucide-react';
+import { Alert, AlertDescription } from '@/shared/components/ui/alert';
+import { ArrowLeft, PackageCheck, PackageMinus, PackageSearch } from 'lucide-react';
 import Link from 'next/link';
 import moment from 'moment';
 import { PURCHASE_INVOICE_STATUS_LABELS, VOUCHER_TYPE_LABELS } from '../shared/validators';
 import type { PurchaseInvoiceStatus } from '@/generated/prisma/enums';
 import { Separator } from '@/shared/components/ui/separator';
 import { cn } from '@/shared/lib/utils';
+import { _DocumentAttachment } from '@/modules/commercial/shared/components/_DocumentAttachment';
+import { _PurchaseInvoiceLinkedDocuments } from './components/_PurchaseInvoiceLinkedDocuments';
+import { _LinkPurchaseInvoiceToProjection } from './components/_LinkPurchaseInvoiceToProjection';
+import { _PurchaseInvoicePDFButton } from './components/_PurchaseInvoicePDFButton';
 
 interface Props {
   invoiceId: string;
@@ -49,16 +54,73 @@ export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
             </p>
           </div>
         </div>
-        <Badge
-          variant={statusVariant}
-          className={cn(
-            'text-sm px-3 py-1',
-            invoice.status === 'CONFIRMED' && 'bg-green-600 hover:bg-green-700'
+        <div className="flex items-center gap-2">
+          <_PurchaseInvoicePDFButton invoice={invoice} />
+          {(invoice.status === 'CONFIRMED' || invoice.status === 'PARTIAL_PAID') && (
+            <_LinkPurchaseInvoiceToProjection
+              invoiceId={invoice.id}
+              fullNumber={invoice.fullNumber}
+              total={Number(invoice.total)}
+            />
           )}
-        >
-          {PURCHASE_INVOICE_STATUS_LABELS[invoice.status as PurchaseInvoiceStatus]}
-        </Badge>
+          <Badge
+            variant={statusVariant}
+            className={cn(
+              'text-sm px-3 py-1',
+              invoice.status === 'CONFIRMED' && 'bg-green-600 hover:bg-green-700'
+            )}
+          >
+            {PURCHASE_INVOICE_STATUS_LABELS[invoice.status as PurchaseInvoiceStatus]}
+          </Badge>
+        </div>
       </div>
+
+      {invoice.receptionStatus === 'pending' && (
+        <Alert className="border-yellow-500/50 bg-yellow-50 dark:bg-yellow-950/20">
+          <PackageSearch className="h-4 w-4 text-yellow-600" />
+          <AlertDescription className="flex items-center justify-between">
+            <span className="text-yellow-800 dark:text-yellow-200">
+              Esta factura tiene productos pendientes de recepción. Cree un remito para registrar el ingreso al almacén.
+            </span>
+            <Button variant="outline" size="sm" asChild className="ml-4 shrink-0">
+              <Link
+                href={`/dashboard/commercial/receiving-notes/new?purchaseInvoiceId=${invoice.id}&supplierId=${invoice.supplierId}`}
+              >
+                Crear remito
+              </Link>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {invoice.receptionStatus === 'partial' && (
+        <Alert className="border-orange-500/50 bg-orange-50 dark:bg-orange-950/20">
+          <PackageMinus className="h-4 w-4 text-orange-500" />
+          <AlertDescription className="flex items-center justify-between">
+            <span className="text-orange-800 dark:text-orange-200">
+              Recepción parcial. Aún quedan productos pendientes de recibir.
+            </span>
+            <Button variant="outline" size="sm" asChild className="ml-4 shrink-0">
+              <Link
+                href={`/dashboard/commercial/receiving-notes/new?purchaseInvoiceId=${invoice.id}&supplierId=${invoice.supplierId}`}
+              >
+                Crear remito
+              </Link>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {invoice.receptionStatus === 'complete' && (
+        <Alert className="border-green-500/50 bg-green-50 dark:bg-green-950/20">
+          <PackageCheck className="h-4 w-4 text-green-600" />
+          <AlertDescription>
+            <span className="text-green-800 dark:text-green-200">
+              Recepción completa. Todos los productos fueron recibidos en el almacén.
+            </span>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Columna Principal */}
@@ -174,6 +236,64 @@ export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
               </CardContent>
             </Card>
           )}
+
+          {/* Documentos Vinculados y Saldo */}
+          <_PurchaseInvoiceLinkedDocuments invoice={invoice} />
+
+          {/* Remitos de Recepción */}
+          {invoice.receivingNotes.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Remitos de Recepción</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {invoice.receivingNotes.map((rn) => (
+                    <div
+                      key={rn.id}
+                      className="flex items-center justify-between py-2 border-b last:border-0"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/dashboard/commercial/receiving-notes/${rn.id}`}
+                          className="text-primary hover:underline font-medium text-sm"
+                        >
+                          {rn.fullNumber}
+                        </Link>
+                        <span className="text-xs text-muted-foreground">
+                          {rn.warehouse.name}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          {moment.utc(rn.receptionDate).format('DD/MM/YYYY')}
+                        </span>
+                        <Badge
+                          variant={
+                            rn.status === 'CONFIRMED'
+                              ? 'default'
+                              : rn.status === 'CANCELLED'
+                                ? 'destructive'
+                                : 'secondary'
+                          }
+                          className={cn(
+                            'text-xs',
+                            rn.status === 'CONFIRMED' && 'bg-green-600 hover:bg-green-700'
+                          )}
+                        >
+                          {rn.status === 'DRAFT'
+                            ? 'Borrador'
+                            : rn.status === 'CONFIRMED'
+                              ? 'Confirmado'
+                              : 'Anulado'}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Columna Lateral */}
@@ -224,6 +344,20 @@ export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
                         Validado
                       </Badge>
                     )}
+                  </div>
+                </>
+              )}
+              {invoice.purchaseOrder && (
+                <>
+                  <Separator />
+                  <div>
+                    <p className="text-sm text-muted-foreground">Orden de Compra</p>
+                    <Link
+                      href={`/dashboard/commercial/purchase-orders/${invoice.purchaseOrder.id}`}
+                      className="text-primary hover:underline font-medium"
+                    >
+                      {invoice.purchaseOrder.fullNumber}
+                    </Link>
                   </div>
                 </>
               )}
@@ -282,6 +416,17 @@ export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
               </div>
             </CardContent>
           </Card>
+
+          {/* Documento Adjunto */}
+          <_DocumentAttachment
+            documentType="purchase-invoice"
+            documentId={invoice.id}
+            companyId={invoice.companyId}
+            companyName={invoice.company.name}
+            documentNumber={invoice.fullNumber}
+            hasDocument={!!invoice.documentUrl}
+            documentUrl={invoice.documentUrl}
+          />
         </div>
       </div>
     </div>

@@ -6,6 +6,7 @@ import React from 'react';
 import { Document, Page, Text, View } from '@react-pdf/renderer';
 import { styles } from './styles';
 import type { ReceiptPDFData } from './types';
+import { LinkedDocumentsSection } from '@/modules/commercial/shared/pdf/LinkedDocumentsSection';
 import moment from 'moment';
 
 interface ReceiptTemplateProps {
@@ -13,7 +14,7 @@ interface ReceiptTemplateProps {
 }
 
 export function ReceiptTemplate({ data }: ReceiptTemplateProps) {
-  const { company, receipt, customer, invoices, payments, totalAmount, notes } = data;
+  const { company, receipt, customer, invoices, payments, totalAmount, notes, linkedDocuments } = data;
 
   return (
     <Document>
@@ -139,6 +140,9 @@ export function ReceiptTemplate({ data }: ReceiptTemplateProps) {
             <Text style={styles.notesText}>{notes}</Text>
           </View>
         )}
+
+        {/* DOCUMENTOS VINCULADOS */}
+        {linkedDocuments && <LinkedDocumentsSection data={linkedDocuments} />}
 
         {/* FOOTER */}
         <View style={styles.footer}>

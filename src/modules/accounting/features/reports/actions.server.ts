@@ -584,3 +584,309 @@ export async function getIncomeStatement(companyId: string, fromDate: Date, toDa
     throw error;
   }
 }
+
+// ==========================================
+// REPORTES DE AUDITORÍA
+// ==========================================
+
+/**
+ * Obtiene asientos sin respaldo documental
+ * (no vinculados a ningún documento comercial ni reversiones)
+ */
+export async function getEntriesWithoutDocuments(
+  companyId: string,
+  fromDate: Date,
+  toDate: Date
+) {
+  const { userId } = await auth();
+  if (!userId) throw new Error('No autenticado');
+
+  const from = startOfDay(fromDate);
+  const to = endOfDay(toDate);
+
+  try {
+    logger.info('Obteniendo asientos sin respaldo', { data: { companyId, from, to } });
+
+    const entries = await prisma.journalEntry.findMany({
+      where: {
+        companyId,
+        date: { gte: from, lte: to },
+        originalEntryId: null,
+        salesInvoices: { none: {} },
+        purchaseInvoices: { none: {} },
+        receipts: { none: {} },
+        paymentOrders: { none: {} },
+      },
+      orderBy: [{ date: 'asc' }, { number: 'asc' }],
+      select: {
+        id: true,
+        number: true,
+        date: true,
+        description: true,
+        status: true,
+        createdBy: true,
+        createdAt: true,
+        lines: {
+          select: {
+            debit: true,
+            credit: true,
+          },
+        },
+      },
+    });
+
+    return entries.map(entry => ({
+      ...entry,
+      totalDebit: entry.lines.reduce((sum, l) => sum + Number(l.debit), 0),
+      totalCredit: entry.lines.reduce((sum, l) => sum + Number(l.credit), 0),
+    }));
+  } catch (error) {
+    logger.error('Error al obtener asientos sin respaldo', { data: { error, companyId, userId } });
+    throw error;
+  }
+}
+
+/**
+ * Obtiene el registro de reversiones (asientos anulados)
+ */
+export async function getReversalLog(
+  companyId: string,
+  fromDate: Date,
+  toDate: Date
+) {
+  const { userId } = await auth();
+  if (!userId) throw new Error('No autenticado');
+
+  const from = startOfDay(fromDate);
+  const to = endOfDay(toDate);
+
+  try {
+    logger.info('Obteniendo registro de reversiones', { data: { companyId, from, to } });
+
+    const entries = await prisma.journalEntry.findMany({
+      where: {
+        companyId,
+        status: JournalEntryStatus.REVERSED,
+        reversedAt: { gte: from, lte: to },
+      },
+      orderBy: { reversedAt: 'desc' },
+      select: {
+        id: true,
+        number: true,
+        date: true,
+        description: true,
+        reversedBy: true,
+        reversedAt: true,
+        reversalEntry: {
+          select: {
+            id: true,
+            number: true,
+            date: true,
+          },
+        },
+        lines: {
+          select: {
+            debit: true,
+            credit: true,
+          },
+        },
+      },
+    });
+
+    return entries.map(entry => ({
+      ...entry,
+      totalAmount: entry.lines.reduce((sum, l) => sum + Number(l.debit), 0),
+    }));
+  } catch (error) {
+    logger.error('Error al obtener registro de reversiones', { data: { error, companyId, userId } });
+    throw error;
+  }
+}
+
+/**
+ * Obtiene la trazabilidad documento-asiento
+ * Cruza documentos comerciales con sus asientos contables
+ */
+export async function getDocumentEntryTraceability(
+  companyId: string,
+  fromDate: Date,
+  toDate: Date,
+  documentType?: 'sales_invoice' | 'purchase_invoice' | 'receipt' | 'payment_order'
+) {
+  const { userId } = await auth();
+  if (!userId) throw new Error('No autenticado');
+
+  const from = startOfDay(fromDate);
+  const to = endOfDay(toDate);
+
+  try {
+    logger.info('Obteniendo trazabilidad documento-asiento', { data: { companyId, from, to, documentType } });
+
+    type TraceabilityItem = {
+      documentType: string;
+      documentId: string;
+      fullNumber: string;
+      date: Date;
+      total: number;
+      status: string;
+      entryNumber: number | null;
+      entryId: string | null;
+      entryDate: Date | null;
+      entryStatus: string | null;
+      hasEntry: boolean;
+    };
+
+    const results: TraceabilityItem[] = [];
+
+    if (!documentType || documentType === 'sales_invoice') {
+      const invoices = await prisma.salesInvoice.findMany({
+        where: {
+          companyId,
+          issueDate: { gte: from, lte: to },
+        },
+        select: {
+          id: true,
+          fullNumber: true,
+          issueDate: true,
+          total: true,
+          status: true,
+          journalEntry: {
+            select: { id: true, number: true, date: true, status: true },
+          },
+        },
+        orderBy: { issueDate: 'asc' },
+      });
+
+      for (const inv of invoices) {
+        results.push({
+          documentType: 'Factura Venta',
+          documentId: inv.id,
+          fullNumber: inv.fullNumber,
+          date: inv.issueDate,
+          total: Number(inv.total),
+          status: inv.status,
+          entryNumber: inv.journalEntry?.number ?? null,
+          entryId: inv.journalEntry?.id ?? null,
+          entryDate: inv.journalEntry?.date ?? null,
+          entryStatus: inv.journalEntry?.status ?? null,
+          hasEntry: !!inv.journalEntry,
+        });
+      }
+    }
+
+    if (!documentType || documentType === 'purchase_invoice') {
+      const invoices = await prisma.purchaseInvoice.findMany({
+        where: {
+          companyId,
+          issueDate: { gte: from, lte: to },
+        },
+        select: {
+          id: true,
+          fullNumber: true,
+          issueDate: true,
+          total: true,
+          status: true,
+          journalEntry: {
+            select: { id: true, number: true, date: true, status: true },
+          },
+        },
+        orderBy: { issueDate: 'asc' },
+      });
+
+      for (const inv of invoices) {
+        results.push({
+          documentType: 'Factura Compra',
+          documentId: inv.id,
+          fullNumber: inv.fullNumber,
+          date: inv.issueDate,
+          total: Number(inv.total),
+          status: inv.status,
+          entryNumber: inv.journalEntry?.number ?? null,
+          entryId: inv.journalEntry?.id ?? null,
+          entryDate: inv.journalEntry?.date ?? null,
+          entryStatus: inv.journalEntry?.status ?? null,
+          hasEntry: !!inv.journalEntry,
+        });
+      }
+    }
+
+    if (!documentType || documentType === 'receipt') {
+      const recs = await prisma.receipt.findMany({
+        where: {
+          companyId,
+          date: { gte: from, lte: to },
+        },
+        select: {
+          id: true,
+          fullNumber: true,
+          date: true,
+          totalAmount: true,
+          status: true,
+          journalEntry: {
+            select: { id: true, number: true, date: true, status: true },
+          },
+        },
+        orderBy: { date: 'asc' },
+      });
+
+      for (const rec of recs) {
+        results.push({
+          documentType: 'Recibo',
+          documentId: rec.id,
+          fullNumber: rec.fullNumber,
+          date: rec.date,
+          total: Number(rec.totalAmount),
+          status: rec.status,
+          entryNumber: rec.journalEntry?.number ?? null,
+          entryId: rec.journalEntry?.id ?? null,
+          entryDate: rec.journalEntry?.date ?? null,
+          entryStatus: rec.journalEntry?.status ?? null,
+          hasEntry: !!rec.journalEntry,
+        });
+      }
+    }
+
+    if (!documentType || documentType === 'payment_order') {
+      const orders = await prisma.paymentOrder.findMany({
+        where: {
+          companyId,
+          date: { gte: from, lte: to },
+        },
+        select: {
+          id: true,
+          fullNumber: true,
+          date: true,
+          totalAmount: true,
+          status: true,
+          journalEntry: {
+            select: { id: true, number: true, date: true, status: true },
+          },
+        },
+        orderBy: { date: 'asc' },
+      });
+
+      for (const order of orders) {
+        results.push({
+          documentType: 'Orden de Pago',
+          documentId: order.id,
+          fullNumber: order.fullNumber,
+          date: order.date,
+          total: Number(order.totalAmount),
+          status: order.status,
+          entryNumber: order.journalEntry?.number ?? null,
+          entryId: order.journalEntry?.id ?? null,
+          entryDate: order.journalEntry?.date ?? null,
+          entryStatus: order.journalEntry?.status ?? null,
+          hasEntry: !!order.journalEntry,
+        });
+      }
+    }
+
+    results.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+    return results;
+  } catch (error) {
+    logger.error('Error al obtener trazabilidad', { data: { error, companyId, userId } });
+    throw error;
+  }
+}
